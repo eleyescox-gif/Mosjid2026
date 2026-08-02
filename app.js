@@ -1330,13 +1330,15 @@ function renderMembersList() {
         const memberDue = calculateMemberTotalDue(m.id);
         if (memberDue > 0) totalDueCount++;
 
-        const memberNum = m.id.replace('member-', '');
-        const memberNumBN = englishToBanglaNum(memberNum);
+        const realIndex = state.members.findIndex(member => member.id === m.id) + 1;
+        const displayNum = String(realIndex).padStart(2, '0');
+        const displayNumBN = englishToBanglaNum(displayNum);
         
         const matchesSearch = m.name.toLowerCase().includes(searchVal) || 
                               (m.phone && m.phone.includes(searchVal)) ||
-                              memberNum.includes(searchVal) ||
-                              memberNumBN.includes(searchVal);
+                              displayNum.includes(searchVal) ||
+                              displayNumBN.includes(searchVal) ||
+                              m.id.includes(searchVal);
                               
         if (!matchesSearch) return false;
 
@@ -1405,7 +1407,7 @@ function renderMembersList() {
                 <div class="member-avatar">${firstChar}</div>
                 <div>
                     <div class="member-name" style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
-                        <span style="font-size: 11px; background-color: var(--primary-light); color: var(--primary-dark); padding: 2px 6px; border-radius: 10px; font-weight: bold; border: 1px solid var(--primary-color);">নং: ${englishToBanglaNum(m.id.replace('member-', ''))}</span>
+                        <span style="font-size: 11px; background-color: var(--primary-light); color: var(--primary-dark); padding: 2px 6px; border-radius: 10px; font-weight: bold; border: 1px solid var(--primary-color);">সদস্য নং - ${displayNumBN}</span>
                         ${m.name}
                         ${advanceAmount > 0 ? `<span style="font-size: 10px; background-color: var(--success-color); color: white; padding: 2px 6px; border-radius: 10px; font-weight: normal;">অগ্রিম: ৳ ${englishToBanglaNum(advanceAmount.toFixed(0))}</span>` : ''}
                     </div>
@@ -3568,7 +3570,8 @@ function generateAllMembersKhata() {
     const months = ['জানুয়ারি', 'ফেব্রুয়ারী', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
     
     activeMembers.forEach(member => {
-        const memberNum = englishToBanglaNum(member.id.replace('member-', ''));
+        const realIndex = state.members.findIndex(m => m.id === member.id) + 1;
+        const memberNum = englishToBanglaNum(String(realIndex).padStart(2, '0'));
         
         let tableRows = '';
         months.forEach(month => {
