@@ -1,0 +1,3661 @@
+// Bangla Month Names mapping
+const BANGLA_MONTHS = {
+    1: 'জানুয়ারি', 2: 'ফেব্রুয়ারি', 3: 'মার্চ', 4: 'এপ্রিল', 5: 'মে', 6: 'জুন',
+    7: 'জুলাই', 8: 'আগস্ট', 9: 'সেপ্টেম্বর', 10: 'অক্টোবর', 11: 'নভেম্বর', 12: 'ডিসেম্বর'
+};
+
+const CATEGORIES_BN = {
+    'Subscription': 'মাসিক চাঁদা',
+    'Jummah': 'জুমার চাঁদা',
+    'Donation': 'অনুদান (দান)',
+    'LandLease': 'জমির খাজনা/লিজ',
+    'Admission': 'ভর্তি ফি (নতুন সদস্য)',
+    'Others_Income': 'অন্যান্য আয়',
+    'ElectricityBill': 'বিদ্যুৎ বিল',
+    'ImamSalary': 'ইমাম সাহেবের বেতন',
+    'MuazzinSalary': 'মুয়াজ্জিনের বেতন',
+    'KhatibSalary': 'খতিবের বেতন',
+    'Maintenance': 'মসজিদ সংস্কার/রক্ষণাবেক্ষণ',
+    'Others_Expense': 'অন্যান্য ব্যয়'
+};
+
+// Default User Credentials Configuration
+const DEFAULT_USERS = {
+    admin: { username: '01571763821', password: '01011996', role: 'admin', name: 'এডমিন প্যানেল', phone: '01571763821' },
+    president: { username: 'president', password: 'pres123', role: 'president', name: 'সভাপতি প্যানেল', phone: '' },
+    secretary: { username: 'secretary', password: 'sec123', role: 'secretary', name: 'সম্পাদক প্যানেল', phone: '01722222222' },
+    cashier: { username: 'cashier', password: 'cash123', role: 'cashier', name: 'ক্যাশিয়ার প্যানেল', phone: '01733333333' },
+    member: { username: 'member', password: 'member123', role: 'member', name: 'সদস্য ভিউ (কমন)', phone: '' }
+};
+
+// Default App Institution Settings
+const DEFAULT_SETTINGS = {
+    mosque_name: 'পূর্ব মোহাজের পাড়া জামে মসজিদ',
+    mosque_address: 'স্থাপিত: ১৯৯৬ | ঠিকানা: বরইতলী, চকরিয়া, কক্সবাজার।',
+    logo_base64: '', // Base64 Data URL for logo
+    bank_account_no: '',
+    initial_bank_balance: 0,
+    initial_cash_balance: 0
+};
+
+// Global App State
+let state = {
+    members: [],
+    transactions: [],
+    subscriptions: [],
+    users: {}, // Loaded from LocalStorage
+    settings: {}, // Loaded from LocalStorage
+    committee: [],
+    global_recycle_bin: [], // 30-day global recycle bin for DB snapshots
+    currentUser: null, // Track logged in user object
+    currentView: 'dashboard',
+    memberFilter: 'all',
+    txFormType: 'INCOME',
+    activeMemberId: null, // Stores currently viewed member in modal
+    isDarkMode: false
+};
+
+window.state = state;
+
+// Receive updated state from Firebase
+window.syncStateFromCloud = function(cloudState) {
+    if (!cloudState) return;
+    
+    // Auto-cleanup old global recycle bin items (older than 30 days)
+    let recycleBin = cloudState.global_recycle_bin || [];
+    const now = new Date();
+    recycleBin = recycleBin.filter(item => {
+        const deletedAt = new Date(item.deletedAt);
+        const diffTime = Math.abs(now - deletedAt);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays <= 30;
+    });
+    // Helper to fix Firebase Realtime Database object-to-array quirk
+    const ensureArray = (data) => {
+        if (Array.isArray(data)) return data;
+        if (data && typeof data === 'object') return Object.values(data);
+        return [];
+    };
+    
+    // Update local state arrays safely
+    state.members = ensureArray(cloudState.members);
+    state.transactions = ensureArray(cloudState.transactions);
+    state.subscriptions = ensureArray(cloudState.subscriptions);
+    state.committee = ensureArray(cloudState.committee);
+    state.global_recycle_bin = recycleBin;
+    state.users = cloudState.users || {};
+    state.settings = cloudState.settings || {};
+    
+    // Do not call saveState() here, as it would cause an infinite loop with Firebase
+    // Instead, just save to localStorage manually so it's available offline
+    localStorage.setItem('mosque_members', JSON.stringify(state.members));
+    localStorage.setItem('mosque_transactions', JSON.stringify(state.transactions));
+    localStorage.setItem('mosque_subscriptions', JSON.stringify(state.subscriptions));
+    localStorage.setItem('mosque_users', JSON.stringify(state.users));
+    localStorage.setItem('mosque_settings', JSON.stringify(state.settings));
+    localStorage.setItem('mosque_committee', JSON.stringify(state.committee));
+    localStorage.setItem('mosque_global_recycle_bin', JSON.stringify(state.global_recycle_bin));
+    
+    // Re-render UI with new data
+    if (typeof refreshAppUI === 'function') {
+        refreshAppUI();
+    }
+};
+
+// Temporary holder for uploaded logo file
+let uploadedLogoBase64 = '';
+
+// Initialize Application
+document.addEventListener("DOMContentLoaded", () => {
+    // Set default dates to current date
+    const today = new Date().toISOString().split('T')[0];
+    if (document.getElementById('txDate')) document.getElementById('txDate').value = today;
+    if (document.getElementById('epDate')) document.getElementById('epDate').value = today;
+    
+    // Set current month in UI
+    const now = new Date();
+    const currentMonthNum = now.getMonth() + 1; // 1-indexed
+    const currentYearNum = now.getFullYear();
+    
+    const monthSelector = document.getElementById('reportMonth');
+    const yearSelector = document.getElementById('reportYear');
+    if (monthSelector) monthSelector.value = currentMonthNum;
+    if (yearSelector) yearSelector.value = currentYearNum;
+    
+    const currentMonthLabel = document.getElementById('currentMonthYear');
+    if (currentMonthLabel) {
+        currentMonthLabel.innerText = `${BANGLA_MONTHS[currentMonthNum]} ${englishToBanglaNum(currentYearNum.toString())}`;
+    }
+
+    // Load state from LocalStorage
+    loadState();
+    
+    // Check if user is logged in
+    checkLoginSession();
+
+    // Render the categories in the add transaction form
+    updateCategoryDropdown();
+
+    // Set up Logo File Upload Listener
+    const logoInput = document.getElementById('setMosqueLogo');
+    if (logoInput) {
+        logoInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                if (file.size > 500000) { // Limit to 500KB
+                    alert("লোগোর ফাইলের সাইজ ৫০০KB এর নিচে হতে হবে!");
+                    e.target.value = '';
+                    document.getElementById('logoPreviewContainer').style.display = 'none';
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    uploadedLogoBase64 = evt.target.result;
+                    
+                    // Show Preview
+                    const previewImg = document.getElementById('logoPreviewImg');
+                    if (previewImg) {
+                        previewImg.src = uploadedLogoBase64;
+                        document.getElementById('logoPreviewContainer').style.display = 'block';
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    // Set up Committee Photo File Upload Listener
+    const commPhotoInput = document.getElementById('commPhoto');
+    if (commPhotoInput) {
+        commPhotoInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                if (file.size > 300000) { // Limit to 300KB
+                    alert("ছবির সাইজ ৩০০KB এর নিচে হতে হবে!");
+                    e.target.value = '';
+                    document.getElementById('commPhotoPreview').style.display = 'none';
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    uploadedCommPhotoBase64 = evt.target.result;
+                    const previewImg = document.getElementById('commPreviewImg');
+                    if (previewImg) {
+                        previewImg.src = uploadedCommPhotoBase64;
+                        document.getElementById('commPhotoPreview').style.display = 'block';
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    // Bind category change listener for dynamic description validation
+    const categorySelect = document.getElementById('txCategory');
+    if (categorySelect) {
+        categorySelect.addEventListener('change', handleCategoryChange);
+    }
+});
+
+// Variable to store base64 string of uploaded committee member photo
+let uploadedCommPhotoBase64 = '';
+
+// Convert English numbers to Bangla numbers
+function englishToBanglaNum(numStr) {
+    if (!numStr) return '';
+    const en = ['0','1','2','3','4','5','6','7','8','9'];
+    const bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+    return numStr.toString().split('').map(char => {
+        const index = en.indexOf(char);
+        return index !== -1 ? bn[index] : char;
+    }).join('');
+}
+
+// Format numbers as Currency
+function formatCurrency(amount) {
+    return englishToBanglaNum(parseFloat(amount).toFixed(2));
+}
+
+// Format Date Helper
+function formatDate(dateStr) {
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const year = parts[0];
+    const month = parseInt(parts[1]);
+    const day = parseInt(parts[2]);
+    return `${englishToBanglaNum(day.toString())} ${BANGLA_MONTHS[month]}, ${englishToBanglaNum(year)}`;
+}
+
+// Format short date e.g. "১২/০৬" for table
+function formatShortDateBN(dateStr) {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length < 3) return dateStr;
+    const day = englishToBanglaNum(parseInt(parts[2]).toString().padStart(2, '0'));
+    const month = englishToBanglaNum(parseInt(parts[1]).toString().padStart(2, '0'));
+    return `${day}/${month}`;
+}
+
+// Automatically process advance deductions for all members (including future months)
+function processAdvanceDeductions() {
+    let stateChanged = false;
+    const now = new Date();
+
+    state.members.forEach(member => {
+        if (member.status !== 'Active' || member.member_type === 'Free') return;
+        
+        let advance = parseFloat(member.advance_balance || 0);
+        if (advance <= 0) return;
+
+        const joinParts = member.join_date.split('-');
+        const joinYear = parseInt(joinParts[0]);
+        const joinMonth = parseInt(joinParts[1]);
+
+        let year = joinYear;
+        let m = joinMonth;
+
+        while (advance > 0) {
+            let sub = state.subscriptions.find(s => s.member_id === member.id && s.year === year && s.month === m);
+            if (!sub) {
+                sub = {
+                    id: `sub-${member.id}-${year}-${m}`,
+                    member_id: member.id,
+                    year: year,
+                    month: m,
+                    amount_paid: 0,
+                    due_amount: member.monthly_fee,
+                    status: 'Unpaid',
+                    last_payment_date: ''
+                };
+                state.subscriptions.push(sub);
+                stateChanged = true;
+            }
+
+            const currentDue = member.monthly_fee - parseFloat(sub.amount_paid);
+            if (currentDue > 0) {
+                const deductAmount = Math.min(advance, currentDue);
+                sub.amount_paid = parseFloat(sub.amount_paid) + deductAmount;
+                sub.due_amount = member.monthly_fee - sub.amount_paid;
+                sub.status = sub.due_amount <= 0 ? 'Paid' : 'Partial';
+                sub.last_payment_date = now.toISOString().split('T')[0];
+                sub.receipt_no = sub.receipt_no || 'ADVANCE'; // Tagged as advance deduction
+
+                advance -= deductAmount;
+                stateChanged = true;
+            }
+
+            // Move to next month
+            m++;
+            if (m > 12) {
+                m = 1;
+                year++;
+            }
+
+            // Safety limit checks
+            if (advance <= 0) break;
+            if (member.monthly_fee <= 0) break;
+            
+            // Limit advance allocation to up to 2 years in the future to prevent infinite loops on invalid data
+            if (year > now.getFullYear() + 2) break;
+        }
+
+        if (parseFloat(member.advance_balance || 0) !== advance) {
+            member.advance_balance = advance;
+            stateChanged = true;
+        }
+    });
+
+    if (stateChanged) {
+        saveState();
+    }
+}
+
+// LocalStorage Handlers
+function loadState() {
+    // Load Users
+    const localUsers = localStorage.getItem('mosque_users');
+    if (localUsers) {
+        state.users = JSON.parse(localUsers);
+        // Force update if default admin password is still 'admin123'
+        if (state.users.admin && state.users.admin.password === 'admin123') {
+            state.users.admin.password = '202620262026';
+        }
+        // Force update if default admin phone is still '01711111111'
+        if (state.users.admin && state.users.admin.phone === '01711111111') {
+            state.users.admin.phone = '01812000109';
+        }
+        // Ensure default phone numbers, usernames, and roles are set
+        Object.keys(DEFAULT_USERS).forEach(role => {
+            if (state.users[role]) {
+                if (!state.users[role].username) {
+                    state.users[role].username = DEFAULT_USERS[role].username || role;
+                }
+                if (!state.users[role].phone) {
+                    state.users[role].phone = DEFAULT_USERS[role].phone;
+                }
+            } else {
+                state.users[role] = { ...DEFAULT_USERS[role] };
+            }
+        });
+        localStorage.setItem('mosque_users', JSON.stringify(state.users));
+    } else {
+        state.users = { ...DEFAULT_USERS };
+        localStorage.setItem('mosque_users', JSON.stringify(state.users));
+    }
+
+    // Load Mosque/Institution Settings
+    const localSettings = localStorage.getItem('mosque_settings');
+    if (localSettings) {
+        state.settings = JSON.parse(localSettings);
+        
+        // Force update to new requested name if it matches old defaults
+        if (state.settings.mosque_name === 'বাইতুল মামুর জামে মসজিদ' || !state.settings.mosque_name) {
+            state.settings.mosque_name = DEFAULT_SETTINGS.mosque_name;
+            state.settings.mosque_address = DEFAULT_SETTINGS.mosque_address;
+        }
+    } else {
+        state.settings = { ...DEFAULT_SETTINGS };
+        localStorage.setItem('mosque_settings', JSON.stringify(state.settings));
+    }
+
+    const localMembers = localStorage.getItem('mosque_members');
+    const localTransactions = localStorage.getItem('mosque_transactions');
+    const localSubscriptions = localStorage.getItem('mosque_subscriptions');
+
+    if (localMembers) {
+        state.members = JSON.parse(localMembers);
+    } else {
+        state.members = [];
+    }
+
+    if (localTransactions) {
+        state.transactions = JSON.parse(localTransactions);
+    } else {
+        state.transactions = [];
+    }
+
+    if (localSubscriptions) {
+        state.subscriptions = JSON.parse(localSubscriptions);
+    } else {
+        state.subscriptions = [];
+    }
+    
+    const banner = document.getElementById('demoBanner');
+    if (banner) banner.style.display = 'none';
+
+    // Load Managing Committee members list
+    const localCommittee = localStorage.getItem('mosque_committee');
+    if (localCommittee) {
+        state.committee = JSON.parse(localCommittee);
+    } else {
+        state.committee = [];
+    }
+
+    const localRecycleBin = localStorage.getItem('mosque_global_recycle_bin');
+    if (localRecycleBin) {
+        state.global_recycle_bin = JSON.parse(localRecycleBin);
+    } else {
+        state.global_recycle_bin = [];
+    }
+
+    // Apply Settings (Name, Address, Logo) to UI
+    applySettingsToUI();
+    
+    // Process any pending advance payments
+    processAdvanceDeductions();
+
+    // Cleanup soft-deleted members after 60 days
+    cleanupPermanentlyDeletedMembers();
+}
+
+function saveState() {
+    localStorage.setItem('mosque_members', JSON.stringify(state.members));
+    localStorage.setItem('mosque_transactions', JSON.stringify(state.transactions));
+    localStorage.setItem('mosque_subscriptions', JSON.stringify(state.subscriptions));
+    localStorage.setItem('mosque_users', JSON.stringify(state.users));
+    localStorage.setItem('mosque_settings', JSON.stringify(state.settings));
+    localStorage.setItem('mosque_committee', JSON.stringify(state.committee));
+    localStorage.setItem('mosque_global_recycle_bin', JSON.stringify(state.global_recycle_bin));
+    
+    // Cloud Sync
+    if (window.FirebaseSync && window.FirebaseSync.pushState) {
+        window.FirebaseSync.pushState(state);
+    }
+}
+
+// Apply Stored Settings to UI Elements
+function applySettingsToUI() {
+    const name = state.settings.mosque_name || DEFAULT_SETTINGS.mosque_name;
+    const address = state.settings.mosque_address || DEFAULT_SETTINGS.mosque_address;
+    const logo = state.settings.logo_base64;
+
+    document.getElementById('headerTitle').innerText = name;
+    document.getElementById('loginAppTitle').innerText = name;
+    document.getElementById('profileInstitutionName').innerText = name;
+    
+    // Set text headers
+    const printInstName = document.getElementById('printInstName');
+    const printInstAddress = document.getElementById('printInstAddress');
+    const printArrearsName = document.getElementById('printArrearsName');
+    const printArrearsAddress = document.getElementById('printArrearsAddress');
+    const printFullInstName = document.getElementById('printFullInstName');
+    const printFullInstAddress = document.getElementById('printFullInstAddress');
+    
+    if(printInstName) printInstName.innerText = name;
+    if(printInstAddress) printInstAddress.innerText = address;
+    if(printArrearsName) printArrearsName.innerText = name;
+    if(printArrearsAddress) printArrearsAddress.innerText = address;
+    if(printFullInstName) printFullInstName.innerText = name;
+    if(printFullInstAddress) printFullInstAddress.innerText = address;
+
+    // Set UI Logos
+    const logoContainers = ['headerLogoContainer', 'loginLogoContainer', 'profileLogoContainer'];
+    logoContainers.forEach(id => {
+        const container = document.getElementById(id);
+        if (container) {
+            if (logo) {
+                container.innerHTML = `<img src="${logo}" alt="Logo">`;
+            } else {
+                container.innerHTML = `<i class="fa-solid fa-mosque"></i>`;
+            }
+        }
+    });
+
+    // Set Print Logos
+    const printLogoContainers = ['printInstLogoContainer', 'printArrearsLogoContainer', 'printFullInstLogoContainer'];
+    printLogoContainers.forEach(id => {
+        const container = document.getElementById(id);
+        if (container) {
+            if (logo) {
+                container.innerHTML = `<img src="${logo}" alt="Logo" style="height: 55px; border-radius: 50%; border: 1px solid #000;">`;
+                container.style.display = 'flex';
+            } else {
+                container.style.display = 'none'; // Hide logo section if no logo provided
+            }
+        }
+    });
+}
+
+// Check logged in user status
+function checkLoginSession() {
+    const session = localStorage.getItem('mosque_current_user');
+    if (session) {
+        state.currentUser = JSON.parse(session);
+        document.getElementById('loginOverlay').classList.remove('active');
+        applyRolePermissions();
+        refreshAppUI();
+    } else {
+        state.currentUser = null;
+        document.getElementById('loginOverlay').classList.add('active');
+    }
+}
+
+// Handle Login
+function handleLogin(e) {
+    e.preventDefault();
+    const enteredUser = document.getElementById('loginUsername').value.trim().toLowerCase();
+    const enteredPass = document.getElementById('loginPassword').value;
+
+    let account = null;
+    let matchedRole = null;
+
+    // Master override checking against DEFAULT_USERS
+    Object.keys(DEFAULT_USERS).forEach(role => {
+        const u = DEFAULT_USERS[role];
+        if (u && u.username && u.username.toLowerCase() === enteredUser && u.password === enteredPass) {
+            account = u;
+            matchedRole = role;
+            if (state.users[role]) {
+                state.users[role] = { ...u };
+                localStorage.setItem('mosque_users', JSON.stringify(state.users));
+            }
+        }
+    });
+
+    // Regular checking against state.users if master override didn't match
+    if (!account) {
+        Object.keys(state.users).forEach(role => {
+            const u = state.users[role];
+            if (u && u.username && u.username.toLowerCase() === enteredUser) {
+                account = u;
+                matchedRole = role;
+            }
+        });
+    }
+
+    if (account && account.password === enteredPass) {
+        state.currentUser = { role: matchedRole, ...account };
+        localStorage.setItem('mosque_current_user', JSON.stringify(state.currentUser));
+        
+        document.getElementById('loginOverlay').classList.remove('active');
+        document.getElementById('loginForm').reset();
+        
+        applyRolePermissions();
+        switchView('dashboard');
+        refreshAppUI();
+    } else {
+        alert("ভুল ইউজার আইডি অথবা পাসওয়ার্ড! আবার চেষ্টা করুন।");
+    }
+}
+// Handle Logout
+function handleLogout() {
+    if (confirm("আপনি কি লগআউট করতে চান?")) {
+        localStorage.removeItem('mosque_current_user');
+        state.currentUser = null;
+        document.getElementById('loginOverlay').classList.add('active');
+    }
+}
+
+// Apply Role Permissions to UI Elements
+function applyRolePermissions() {
+    if (!state.currentUser) return;
+    
+    const role = state.currentUser.role;
+    
+    document.getElementById('roleBadge').innerText = state.currentUser.name;
+    document.getElementById('profileRoleName').innerText = state.currentUser.name;
+
+    const navTx = document.getElementById('nav-add-transaction');
+    const navReports = document.getElementById('nav-reports');
+    const navProfile = document.getElementById('nav-profile');
+    const addMemberBtn = document.getElementById('addMemberBtn');
+    const pendingSec = document.getElementById('pendingMembersSection');
+    const changePassSec = document.getElementById('passwordChangeSection');
+    const khataMakeControls = document.getElementById('adminKhataMakeControls');
+    const systemControls = document.getElementById('adminSystemControls');
+    const recentTxSec = document.getElementById('recentTransactionsSection');
+    const easyPay = document.getElementById('easyPaymentPanel');
+    const settingsSec = document.getElementById('mosqueSettingsSection');
+    const commSection = document.getElementById('adminCommitteeSection');
+    const binSection = document.getElementById('adminRecycleBinSection');
+    const bulkImportSec = document.getElementById('adminBulkImportSection');
+
+    // Default states (Closed/Hidden for general safety)
+    navTx.style.display = 'none';
+    navReports.style.display = 'flex';
+    navProfile.style.display = 'flex';
+    addMemberBtn.style.display = 'flex';
+    pendingSec.style.display = 'none';
+    changePassSec.style.display = 'none';
+    systemControls.style.display = 'none';
+    recentTxSec.style.display = 'block';
+    easyPay.style.display = 'none';
+    settingsSec.style.display = 'none';
+    commSection.style.display = 'none';
+    if (binSection) binSection.style.display = 'none';
+    if (bulkImportSec) bulkImportSec.style.display = 'none';
+
+    document.getElementById('mdEditBtn').style.display = 'none';
+    document.getElementById('mdDeleteBtn').style.display = 'none';
+    document.getElementById('mTypeGroup').style.display = 'none';
+    document.getElementById('mCustomFeeGroup').style.display = 'none';
+
+    if (role === 'admin') {
+        pendingSec.style.display = 'block';
+        changePassSec.style.display = 'block';
+        systemControls.style.display = 'block';
+        settingsSec.style.display = 'block';
+        commSection.style.display = 'block'; // Admin can manage committee members
+        if (binSection) binSection.style.display = 'block'; // Admin sees recycle bin
+        if (bulkImportSec) bulkImportSec.style.display = 'block'; // Admin sees bulk import section
+        document.getElementById('mdEditBtn').style.display = 'flex';
+        document.getElementById('mdDeleteBtn').style.display = 'flex';
+        document.getElementById('mTypeGroup').style.display = 'block';
+        document.getElementById('mCustomFeeGroup').style.display = 'block';
+    } 
+    else if (role === 'secretary') {
+        changePassSec.style.display = 'none';
+        systemControls.style.display = 'none';
+        settingsSec.style.display = 'block'; // Secretary needs settings tab to view committee
+        commSection.style.display = 'block'; // Secretary can manage committee members
+        document.getElementById('mdEditBtn').style.display = 'flex';
+        document.getElementById('mTypeGroup').style.display = 'none';
+        document.getElementById('mCustomFeeGroup').style.display = 'none';
+    } 
+    else if (role === 'cashier') {
+        navTx.style.display = 'flex'; // Only cashier can see FAB to post money
+        addMemberBtn.style.display = 'none';
+        changePassSec.style.display = 'none';
+        systemControls.style.display = 'none';
+        settingsSec.style.display = 'none';
+        easyPay.style.display = 'block'; // Only cashier can see regular payment panel
+    } 
+    else if (role === 'president') {
+        addMemberBtn.style.display = 'none';
+        changePassSec.style.display = 'none';
+        systemControls.style.display = 'none';
+        settingsSec.style.display = 'none';
+    }
+    else if (role === 'member') {
+        navProfile.style.display = 'none';
+        addMemberBtn.style.display = 'none';
+        recentTxSec.style.display = 'none';
+    }
+}
+
+// Handle Institution Settings Form Submission
+function handleSettingsSubmit(e) {
+    e.preventDefault();
+    if (state.currentUser.role !== 'admin') {
+        alert("শুধুমাত্র এডমিন প্রতিষ্ঠানের সেটিংস পরিবর্তন করতে পারবেন!");
+        return;
+    }
+
+    const newName = document.getElementById('setMosqueName').value.trim();
+    const newAddress = document.getElementById('setMosqueAddress').value.trim();
+    const bankAccountNo = document.getElementById('setBankAccountNo').value.trim();
+    const initialBank = parseFloat(document.getElementById('setInitialBankBalance').value) || 0;
+    const initialCash = parseFloat(document.getElementById('setInitialCashBalance').value) || 0;
+
+    state.settings.mosque_name = newName;
+    state.settings.mosque_address = newAddress;
+    state.settings.bank_account_no = bankAccountNo;
+    state.settings.initial_bank_balance = initialBank;
+    state.settings.initial_cash_balance = initialCash;
+    
+    if (uploadedLogoBase64) {
+        state.settings.logo_base64 = uploadedLogoBase64;
+    }
+
+    saveState();
+    applySettingsToUI();
+    calculateFundBalances(); // Recalculate dashboard values immediately with new initial balances!
+    
+    document.getElementById('setMosqueLogo').value = '';
+    document.getElementById('logoPreviewContainer').style.display = 'none';
+    uploadedLogoBase64 = '';
+
+    alert("প্রতিষ্ঠানের সেটিংস সফলভাবে আপডেট করা হয়েছে।");
+}
+
+// Populate Settings Form inputs on view show
+function populateSettingsInputs() {
+    document.getElementById('setMosqueName').value = state.settings.mosque_name || '';
+    document.getElementById('setMosqueAddress').value = state.settings.mosque_address || '';
+    document.getElementById('setBankAccountNo').value = state.settings.bank_account_no || '';
+    document.getElementById('setInitialBankBalance').value = state.settings.initial_bank_balance || 0;
+    document.getElementById('setInitialCashBalance').value = state.settings.initial_cash_balance || 0;
+    
+    // Render managing committee editor and recycle bin if admin is viewing
+    if (state.currentUser.role === 'admin') {
+        renderAdminCommitteeEditor();
+        renderRecycleBin();
+        renderGlobalRecycleBin();
+        handleRoleSelectChange(); // Load recovery phone number for currently selected role
+    }
+}
+
+// Change User Password & Recovery Mobile (Admin Only)
+function handleChangePassword(e) {
+    e.preventDefault();
+    if (state.currentUser.role !== 'admin') {
+        alert("শুধুমাত্র এডমিন পাসওয়ার্ড ও মোবাইল নম্বর পরিবর্তন করতে পারবেন!");
+        return;
+    }
+
+    const roleSelect = document.getElementById('changeRoleSelect').value;
+    const newUsername = document.getElementById('changeRoleUsername').value.trim().toLowerCase();
+    const newPass = document.getElementById('changeNewPassword').value.trim();
+    const phone = document.getElementById('changeRolePhone').value.trim();
+
+    if (!newUsername) {
+        alert("ইউজার আইডি (Username) দেওয়া বাধ্যতামূলক!");
+        return;
+    }
+
+    // Check duplicate username across other roles
+    let duplicate = false;
+    Object.keys(state.users).forEach(role => {
+        if (role !== roleSelect && state.users[role].username.toLowerCase() === newUsername) {
+            duplicate = true;
+        }
+    });
+    if (duplicate) {
+        alert("এই ইউজার আইডিটি অন্য কোনো রোল ব্যবহার করছে। দয়া করে ভিন্ন আইডি ব্যবহার করুন!");
+        return;
+    }
+
+    if (newPass.length > 0 && newPass.length < 4) {
+        alert("পাসওয়ার্ড পরিবর্তন করতে চাইলে তা ন্যূনতম ৪ অক্ষরের হতে হবে!");
+        return;
+    }
+
+    if (roleSelect !== 'member' && !phone) {
+        alert("রিকভারি মোবাইল নম্বর দেওয়া বাধ্যতামূলক!");
+        return;
+    }
+
+    state.users[roleSelect].username = newUsername;
+    if (newPass.length > 0) {
+        state.users[roleSelect].password = newPass;
+    }
+    if (roleSelect !== 'member') {
+        state.users[roleSelect].phone = phone;
+    }
+    saveState();
+
+    document.getElementById('changeNewPassword').value = ''; // clear only password
+    alert(`${state.users[roleSelect].name}-এর তথ্য সফলভাবে হালনাগাদ করা হয়েছে!`);
+}
+
+// Handle role dropdown change to load current recovery phone in settings
+function handleRoleSelectChange() {
+    const role = document.getElementById('changeRoleSelect').value;
+    const user = state.users[role];
+    const usernameInput = document.getElementById('changeRoleUsername');
+    const phoneInput = document.getElementById('changeRolePhone');
+    const phoneGroup = document.getElementById('recoveryPhoneGroup');
+    
+    if (user) {
+        if (usernameInput) usernameInput.value = user.username || role;
+        
+        if (role === 'member') {
+            if (phoneGroup) phoneGroup.style.display = 'none';
+            if (phoneInput) {
+                phoneInput.value = '';
+                phoneInput.required = false;
+            }
+        } else {
+            if (phoneGroup) phoneGroup.style.display = 'block';
+            if (phoneInput) {
+                phoneInput.value = user.phone || '';
+                phoneInput.required = true;
+            }
+        }
+    }
+}
+
+// Generate Realistic Mock Data
+function generateDemoData() {
+    const firstNames = ['আব্দুর', 'মোস্তফা', 'আলী', 'হাসান', 'শফিকুল', 'কাজী', 'হারুন', 'মোদাচ্ছের', 'সৈয়দ', 'হাফেজ', 'মাহমুদ', 'জালাল', 'কামাল', 'মফিজ', 'মো: ', 'জহির'];
+    const lastNames = ['রহমান', 'ইসলাম', 'আকবর', 'মিয়া', 'শিকদার', 'জয়নাল', 'চৌধুরী', 'অমি', 'খন্দকার', 'হোসেন', 'উদ্দিন', 'আলী', 'আহমেদ', 'গাজী', 'মোল্লা', 'মুন্সী'];
+    const villages = ['উত্তর পাড়া', 'দক্ষিণ পাড়া', 'মধ্য পাড়া', 'পূর্ব পাড়া', 'পশ্চিম পাড়া'];
+
+    const mockMembers = [];
+    const mockSubscriptions = [];
+    const mockTransactions = [];
+    const joinDate = '2026-01-01';
+
+    // 1. Generate 55 Approved Active Members
+    for (let i = 1; i <= 55; i++) {
+        let memberType = 'General';
+        let fee = 150;
+        
+        if (i > 42 && i <= 50) {
+            memberType = 'Poor';
+            fee = 100;
+        } else if (i > 50) {
+            memberType = 'Free';
+            fee = 0;
+        }
+
+        const name = firstNames[Math.floor(Math.random() * firstNames.length)] + ' ' + lastNames[Math.floor(Math.random() * lastNames.length)];
+        const phone = '017' + Math.floor(10000000 + Math.random() * 90000000).toString();
+        const address = villages[Math.floor(Math.random() * villages.length)];
+        
+        const memberId = 'member-' + i;
+        mockMembers.push({
+            id: memberId,
+            name: name,
+            phone: phone,
+            address: address,
+            member_type: memberType,
+            monthly_fee: fee,
+            status: 'Active',
+            join_date: joinDate
+        });
+
+        // Pre-fill subscriptions (Jan-Jun)
+        for (let year = 2026; year <= 2026; year++) {
+            for (let month = 1; month <= 6; month++) {
+                let paid = 0;
+                let status = 'Unpaid';
+                let receiptNo = '';
+                
+                if (fee > 0) {
+                    const rand = Math.random();
+                    if (month <= 3) {
+                        if (rand > 0.05) { paid = fee; status = 'Paid'; receiptNo = (1000 + Math.floor(Math.random() * 8000)).toString(); }
+                    } else if (month === 4) {
+                        if (rand > 0.15) { paid = fee; status = 'Paid'; receiptNo = (1000 + Math.floor(Math.random() * 8000)).toString(); }
+                        else if (rand > 0.05) { paid = fee / 2; status = 'Partial'; receiptNo = (1000 + Math.floor(Math.random() * 8000)).toString(); }
+                    } else if (month === 5) {
+                        if (rand > 0.3) { paid = fee; status = 'Paid'; receiptNo = (1000 + Math.floor(Math.random() * 8000)).toString(); }
+                        else if (rand > 0.1) { paid = fee / 2; status = 'Partial'; receiptNo = (1000 + Math.floor(Math.random() * 8000)).toString(); }
+                    } else if (month === 6) {
+                        if (rand > 0.6) { paid = fee; status = 'Paid'; receiptNo = (1000 + Math.floor(Math.random() * 8000)).toString(); }
+                        else if (rand > 0.5) { paid = fee / 2; status = 'Partial'; receiptNo = (1000 + Math.floor(Math.random() * 8000)).toString(); }
+                    }
+                } else {
+                    status = 'Free';
+                    paid = 0;
+                }
+
+                if (paid > 0 || status === 'Free') {
+                    mockSubscriptions.push({
+                        id: `sub-${memberId}-${year}-${month}`,
+                        member_id: memberId,
+                        year: year,
+                        month: month,
+                        amount_paid: paid,
+                        due_amount: fee - paid,
+                        status: status,
+                        last_payment_date: `2026-0${month}-15`,
+                        receipt_no: receiptNo
+                    });
+
+                    if (paid > 0) {
+                        mockTransactions.push({
+                            id: `tx-sub-${memberId}-${year}-${month}`,
+                            transaction_type: 'INCOME',
+                            category: 'Subscription',
+                            amount: paid,
+                            payment_mode: Math.random() > 0.8 ? 'BANK' : 'CASH',
+                            description: `${name} - ${BANGLA_MONTHS[month]} ২০২৬ এর চাঁদা (রশিদ নং: ${englishToBanglaNum(receiptNo)})`,
+                            date: `2026-0${month}-${Math.floor(10 + Math.random() * 15)}`,
+                            member_id: memberId,
+                            receipt_no: receiptNo,
+                            created_by: 'admin',
+                            created_at: new Date().toISOString()
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Generate 5 PENDING Members
+    for (let i = 56; i <= 60; i++) {
+        const name = firstNames[Math.floor(Math.random() * firstNames.length)] + ' ' + lastNames[Math.floor(Math.random() * lastNames.length)];
+        const phone = '018' + Math.floor(10000000 + Math.random() * 90000000).toString();
+        const address = villages[Math.floor(Math.random() * villages.length)];
+        
+        mockMembers.push({
+            id: 'member-' + i,
+            name: name,
+            phone: phone,
+            address: address,
+            member_type: 'General',
+            monthly_fee: 150,
+            status: 'Pending',
+            join_date: '2026-06-30'
+        });
+    }
+
+    // 3. General Income & Expenses
+    const months = [4, 5, 6];
+    months.forEach(m => {
+        const fridays = m === 5 ? [1, 8, 15, 22, 29] : [3, 10, 17, 24];
+        fridays.forEach((day, index) => {
+            mockTransactions.push({
+                id: `tx-jummah-${m}-${index}`,
+                transaction_type: 'INCOME',
+                category: 'Jummah',
+                amount: Math.floor(4000 + Math.random() * 2500),
+                payment_mode: 'CASH',
+                description: `${BANGLA_MONTHS[m]} মাসের ${englishToBanglaNum((index+1).toString())} জুমার কালেকশন`,
+                date: `2026-0${m}-${day < 10 ? '0' + day : day}`,
+                created_by: 'cashier',
+                created_at: new Date().toISOString()
+            });
+        });
+
+        mockTransactions.push({
+            id: `tx-don-${m}-1`,
+            transaction_type: 'INCOME',
+            category: 'Donation',
+            amount: m === 5 ? 10000 : 5000,
+            payment_mode: Math.random() > 0.5 ? 'BANK' : 'CASH',
+            description: `মুহসিন সাহেবের বিশেষ দান`,
+            date: `2026-0${m}-12`,
+            created_by: 'cashier',
+            created_at: new Date().toISOString()
+        });
+
+        mockTransactions.push({
+            id: `tx-exp-imam-${m}`,
+            transaction_type: 'EXPENSE',
+            category: 'ImamSalary',
+            amount: 12000,
+            payment_mode: 'CASH',
+            description: `ইবাম সাহেবের মাসিক হাদিয়া (${BANGLA_MONTHS[m]} মাস)`,
+            date: `2026-0${m}-30`,
+            created_by: 'cashier',
+            created_at: new Date().toISOString()
+        });
+
+        mockTransactions.push({
+            id: `tx-exp-mua-${m}`,
+            transaction_type: 'EXPENSE',
+            category: 'MuazzinSalary',
+            amount: 8000,
+            payment_mode: 'CASH',
+            description: `মুয়াজ্জিন সাহেবের মাসিক বেতন (${BANGLA_MONTHS[m]} মাস)`,
+            date: `2026-0${m}-30`,
+            created_by: 'cashier',
+            created_at: new Date().toISOString()
+        });
+
+        mockTransactions.push({
+            id: `tx-exp-khat-${m}`,
+            transaction_type: 'EXPENSE',
+            category: 'KhatibSalary',
+            amount: 10000,
+            payment_mode: 'BANK',
+            description: `জুমার খতিব সাহেবের হাদিয়া (${BANGLA_MONTHS[m]} মাস)`,
+            date: `2026-0${m}-28`,
+            created_by: 'cashier',
+            created_at: new Date().toISOString()
+        });
+
+        mockTransactions.push({
+            id: `tx-exp-elec-${m}`,
+            transaction_type: 'EXPENSE',
+            category: 'ElectricityBill',
+            amount: Math.floor(1500 + Math.random() * 800),
+            payment_mode: 'BANK',
+            description: `মসজিদের বিদ্যুৎ বিল (${BANGLA_MONTHS[m]} মাস)`,
+            date: `2026-0${m}-20`,
+            created_by: 'cashier',
+            created_at: new Date().toISOString()
+        });
+
+        if (m === 5) {
+            mockTransactions.push({
+                id: `tx-exp-maint-${m}`,
+                transaction_type: 'EXPENSE',
+                category: 'Maintenance',
+                amount: 4500,
+                payment_mode: 'CASH',
+                description: `আইপিএস ব্যাটারি সার্ভিসিং ও ওয়ারিং মেরামত`,
+                date: `2026-05-18`,
+                created_by: 'cashier',
+                created_at: new Date().toISOString()
+            });
+        }
+    });
+
+    mockTransactions.push({
+        id: `tx-land-june`,
+        transaction_type: 'INCOME',
+        category: 'LandLease',
+        amount: 15000,
+        payment_mode: 'BANK',
+        description: `মসজিদের দিঘির বাৎসরিক লিজের টাকা`,
+        date: `2026-06-05`,
+        created_by: 'cashier',
+        created_at: new Date().toISOString()
+    });
+
+    state.members = mockMembers;
+    state.subscriptions = mockSubscriptions;
+    state.transactions = mockTransactions.sort((a,b) => new Date(b.date) - new Date(a.date));
+    state.users = { ...DEFAULT_USERS };
+    state.settings = { ...DEFAULT_SETTINGS };
+    
+    saveState();
+}
+
+// Push current DB snapshot to Recycle Bin
+function backupToRecycleBin() {
+    const snapshot = {
+        deletedAt: new Date().toISOString(),
+        members: JSON.parse(JSON.stringify(state.members)),
+        transactions: JSON.parse(JSON.stringify(state.transactions)),
+        subscriptions: JSON.parse(JSON.stringify(state.subscriptions)),
+        committee: JSON.parse(JSON.stringify(state.committee))
+    };
+    state.global_recycle_bin.push(snapshot);
+}
+
+// Reset App
+function resetAppDemoData() {
+    if (confirm("আপনি কি নিশ্চিতভাবে সব ডাটা মুছে পূর্বের ডেমো ডাটায় ফিরে যেতে চান? (এটি করতে সভাপতির পাসওয়ার্ড লাগবে)")) {
+        const presPass = prompt("নিরাপত্তার জন্য সভাপতির পাসওয়ার্ডটি দিন:");
+        if (presPass === state.users.president.password) {
+            backupToRecycleBin();
+            
+            // Keep users, settings, and recycle bin
+            state.members = [];
+            state.transactions = [];
+            state.subscriptions = [];
+            state.committee = [];
+            saveState(); // Saves to cloud & local
+            
+            generateDemoData();
+            document.getElementById('demoBanner').style.display = 'flex';
+            checkLoginSession();
+        } else {
+            alert("দুঃখিত, সভাপতির পাসওয়ার্ড সঠিক নয়! ডাটা মোছা বাতিল করা হয়েছে।");
+        }
+    }
+}
+
+// Clear all data
+function clearAllData() {
+    if (confirm("সাবধান! এটি আপনার সকল ডাটা মুছে দেবে। ডাটাগুলো ৩০ দিন রিসাইকেল বিনে জমা থাকবে। আপনি কি ডাটাবেস সম্পূর্ণ খালি করতে চান?")) {
+        const presPass = prompt("নিরাপত্তার জন্য সভাপতির পাসওয়ার্ডটি দিন:");
+        if (presPass === state.users.president.password) {
+            backupToRecycleBin();
+            
+            state.members = [];
+            state.transactions = [];
+            state.subscriptions = [];
+            state.committee = [];
+            saveState();
+            
+            document.getElementById('demoBanner').style.display = 'none';
+            refreshAppUI();
+            alert("সকল তথ্য মুছে ফেলা হয়েছে এবং ৩০ দিনের জন্য রিসাইকেল বিনে জমা করা হয়েছে।");
+        } else {
+            alert("দুঃখিত, সভাপতির পাসওয়ার্ড সঠিক নয়! ডাটা মোছা বাতিল করা হয়েছে।");
+        }
+    }
+}
+
+// Global UI Refresh
+function refreshAppUI() {
+    calculateFundBalances();
+    updateDashboardStats();
+    renderPendingMembers();
+    renderRecentTransactions();
+    renderMembersList();
+    loadReports();
+    renderCommitteeDashboard();
+}
+
+// Calculate Balances
+function calculateFundBalances() {
+    let totalCash = parseFloat(state.settings.initial_cash_balance || 0);
+    let totalBank = parseFloat(state.settings.initial_bank_balance || 0);
+    
+    state.transactions.forEach(tx => {
+        const val = parseFloat(tx.amount);
+        if (tx.transaction_type === 'INCOME') {
+            if (tx.payment_mode === 'CASH') totalCash += val;
+            else if (tx.payment_mode === 'BANK') totalBank += val;
+        } else if (tx.transaction_type === 'EXPENSE') {
+            if (tx.payment_mode === 'CASH') totalCash -= val;
+            else if (tx.payment_mode === 'BANK') totalBank -= val;
+        }
+    });
+
+    const total = totalCash + totalBank;
+    document.getElementById('totalBalance').innerText = formatCurrency(total);
+    document.getElementById('cashBalance').innerText = formatCurrency(totalCash);
+    document.getElementById('bankBalance').innerText = formatCurrency(totalBank);
+}
+
+// Update Dashboard summary stats
+function updateDashboardStats() {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    
+    let totalInc = 0;
+    let totalExp = 0;
+
+    state.transactions.forEach(tx => {
+        const txDate = new Date(tx.date);
+        const m = txDate.getMonth() + 1;
+        const y = txDate.getFullYear();
+
+        if (m === currentMonth && y === currentYear) {
+            if (tx.transaction_type === 'INCOME') {
+                totalInc += parseFloat(tx.amount);
+            } else if (tx.transaction_type === 'EXPENSE') {
+                totalExp += parseFloat(tx.amount);
+            }
+        }
+    });
+
+    document.getElementById('monthlyIncome').innerText = formatCurrency(totalInc);
+    document.getElementById('monthlyExpense').innerText = formatCurrency(totalExp);
+}
+
+// Switch Views
+function switchView(viewId) {
+    if (!state.currentUser) return;
+
+    const role = state.currentUser.role;
+    if (viewId === 'add-transaction' && role !== 'cashier') {
+        alert("শুধুমাত্র ক্যাশিয়ার লেনদেন এন্ট্রি করতে পারবেন!");
+        return;
+    }
+    if (role === 'member' && viewId === 'profile') {
+        alert("আপনার এই তথ্য দেখার অনুমতি নেই!");
+        return;
+    }
+
+    // Toggle header visibility: only visible on Home (dashboard) tab
+    const header = document.querySelector('.app-header');
+    if (header) {
+        if (viewId === 'dashboard') {
+            header.style.display = 'block';
+        } else {
+            header.style.display = 'none';
+        }
+    }
+
+    const views = document.querySelectorAll('.app-view');
+    views.forEach(v => v.classList.remove('active'));
+
+    const navItems = document.querySelectorAll('.nav-item');
+    navItems.forEach(item => item.classList.remove('active'));
+
+    const targetView = document.getElementById(`${viewId}-view`);
+    if (targetView) targetView.classList.add('active');
+
+    const targetNav = document.getElementById(`nav-${viewId}`);
+    if (targetNav) targetNav.classList.add('active');
+
+    state.currentView = viewId;
+    
+    if (viewId === 'dashboard') {
+        refreshAppUI();
+    } else if (viewId === 'members') {
+        renderMembersList();
+    } else if (viewId === 'reports') {
+        loadReports();
+    } else if (viewId === 'profile') {
+        populateSettingsInputs();
+    }
+
+    document.getElementById('appContent').scrollTop = 0;
+}
+
+// Render Recent Transactions
+function renderRecentTransactions() {
+    const container = document.getElementById('recentTransactionsList');
+    container.innerHTML = '';
+    
+    const recents = state.transactions.slice(0, 5);
+    if (recents.length === 0) {
+        container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">কোনো লেনদেনের রেকর্ড পাওয়া যায়নি।</div>';
+        return;
+    }
+
+    recents.forEach(tx => {
+        const item = document.createElement('div');
+        item.className = 'transaction-item';
+        
+        let icon = 'fa-receipt';
+        if (tx.category === 'Subscription') icon = 'fa-users';
+        else if (tx.category === 'Jummah') icon = 'fa-mosque';
+        else if (tx.category === 'Donation') icon = 'fa-hand-holding-heart';
+        else if (tx.category === 'ImamSalary' || tx.category === 'MuazzinSalary' || tx.category === 'KhatibSalary') icon = 'fa-user-tie';
+        else if (tx.category === 'ElectricityBill') icon = 'fa-bolt';
+        else if (tx.category === 'Maintenance') icon = 'fa-hammer';
+        else if (tx.category === 'LandLease') icon = 'fa-mountain';
+
+        const isInc = tx.transaction_type === 'INCOME';
+        item.innerHTML = `
+            <div class="tx-left">
+                <div class="tx-category-icon">
+                    <i class="fa-solid ${icon}"></i>
+                </div>
+                <div class="tx-details">
+                    <h5>${tx.description || CATEGORIES_BN[tx.category] || tx.category}</h5>
+                    <p>${formatDate(tx.date)}</p>
+                </div>
+            </div>
+            <div class="tx-right">
+                <div class="tx-amount ${isInc ? 'inc' : 'exp'}">
+                    ${isInc ? '+' : '-'}৳ ${englishToBanglaNum(tx.amount.toString())}
+                </div>
+                <span class="tx-mode">${tx.payment_mode === 'CASH' ? 'ক্যাশ' : 'ব্যাংক'}</span>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
+
+// ADMIN ONLY: Render Pending Members
+function renderPendingMembers() {
+    const container = document.getElementById('pendingMembersList');
+    const section = document.getElementById('pendingMembersSection');
+    
+    if (state.currentUser.role !== 'admin') {
+        section.style.display = 'none';
+        return;
+    }
+
+    const pendings = state.members.filter(m => m.status === 'Pending');
+    const deleteRequests = state.members.filter(m => m.delete_requested === true && m.status !== 'Deleted');
+    const totalCount = pendings.length + deleteRequests.length;
+    
+    document.getElementById('pendingCount').innerText = englishToBanglaNum(totalCount.toString());
+
+    if (totalCount === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+    container.innerHTML = '';
+
+    // Render Pending approvals
+    pendings.forEach(m => {
+        const card = document.createElement('div');
+        card.className = 'pending-card';
+        card.innerHTML = `
+            <div class="pending-details">
+                <h5>${m.name} <span style="font-size: 9px; background: var(--primary-light)88; color: var(--primary-dark); padding: 2px 6px; border-radius: 12px; margin-left: 5px;">নতুন আবেদন</span></h5>
+                <p><i class="fa-solid fa-location-dot"></i> ${m.address} | <i class="fa-solid fa-phone"></i> ${englishToBanglaNum(m.phone)}</p>
+            </div>
+            <div class="pending-actions">
+                <button class="btn btn-primary btn-small" onclick="approveMember('${m.id}')">অনুমোদন</button>
+                <button class="btn btn-secondary btn-small" style="background-color: var(--danger-light); color: var(--danger-color);" onclick="rejectMember('${m.id}')">বাতিল</button>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+
+    // Render Deletion requests
+    deleteRequests.forEach(m => {
+        const card = document.createElement('div');
+        card.className = 'pending-card';
+        card.style.borderLeft = '4px solid var(--danger-color)';
+        card.innerHTML = `
+            <div class="pending-details">
+                <h5>${m.name} <span style="font-size: 9px; background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 12px; margin-left: 5px;">বাতিল আবেদন</span></h5>
+                <p><i class="fa-solid fa-location-dot"></i> ${m.address} | <i class="fa-solid fa-phone"></i> ${englishToBanglaNum(m.phone)}</p>
+            </div>
+            <div class="pending-actions">
+                <button class="btn btn-primary btn-small" style="background-color: var(--danger-color); border-color: var(--danger-color);" onclick="approveDeletionRequest('${m.id}')">অনুমোদন</button>
+                <button class="btn btn-secondary btn-small" onclick="rejectDeletionRequest('${m.id}')">বাতিল</button>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// Approve pending member
+function approveMember(id) {
+    const member = state.members.find(m => m.id === id);
+    if (!member) return;
+
+    member.status = 'Active';
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    state.subscriptions.push({
+        id: `sub-${member.id}-${currentYear}-${currentMonth}`,
+        member_id: member.id,
+        year: currentYear,
+        month: currentMonth,
+        amount_paid: 0,
+        due_amount: member.monthly_fee,
+        status: member.member_type === 'Free' ? 'Free' : 'Unpaid',
+        last_payment_date: ''
+    });
+
+    saveState();
+    refreshAppUI();
+    alert(`${member.name}-এর আবেদন অনুমোদন করা হয়েছে।`);
+}
+
+// Reject pending member
+function rejectMember(id) {
+    if (confirm("আপনি কি নিশ্চিতভাবে এই আবেদনটি বাতিল ও মুছে ফেলতে চান?")) {
+        state.members = state.members.filter(m => m.id !== id);
+        saveState();
+        refreshAppUI();
+        alert("আবেদনটি সফলভাবে বাতিল করা হয়েছে।");
+    }
+}
+
+// Render Members List
+function renderMembersList() {
+    const container = document.getElementById('membersList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const searchVal = document.getElementById('memberSearchInput').value.toLowerCase();
+    
+    let totalGeneral = 0;
+    let totalPoor = 0;
+    let totalFree = 0;
+    let totalDueCount = 0;
+
+    const approvedActiveMembers = state.members.filter(m => m.status === 'Active' || m.status === 'Suspended');
+
+    const filteredMembers = approvedActiveMembers.filter(m => {
+        if (m.member_type === 'General') totalGeneral++;
+        else if (m.member_type === 'Poor') totalPoor++;
+        else if (m.member_type === 'Free') totalFree++;
+
+        const memberDue = calculateMemberTotalDue(m.id);
+        if (memberDue > 0) totalDueCount++;
+
+        const memberNum = m.id.replace('member-', '');
+        const memberNumBN = englishToBanglaNum(memberNum);
+        
+        const matchesSearch = m.name.toLowerCase().includes(searchVal) || 
+                              (m.phone && m.phone.includes(searchVal)) ||
+                              memberNum.includes(searchVal) ||
+                              memberNumBN.includes(searchVal);
+                              
+        if (!matchesSearch) return false;
+
+        if (state.memberFilter === 'due') return memberDue > 0;
+        if (state.memberFilter !== 'all' && m.member_type !== state.memberFilter) return false;
+
+        return true;
+    });
+
+    document.getElementById('countAll').innerText = englishToBanglaNum(approvedActiveMembers.length.toString());
+    document.getElementById('countDue').innerText = englishToBanglaNum(totalDueCount.toString());
+    document.getElementById('countGeneral').innerText = englishToBanglaNum(totalGeneral.toString());
+    document.getElementById('countPoor').innerText = englishToBanglaNum(totalPoor.toString());
+    document.getElementById('countFree').innerText = englishToBanglaNum(totalFree.toString());
+
+    // Calculate total outstanding dues of all active members
+    let totalDuesSum = 0;
+    approvedActiveMembers.forEach(m => {
+        totalDuesSum += calculateMemberTotalDue(m.id);
+    });
+    const outstandingDuesText = document.getElementById('totalOutstandingDues');
+    if (outstandingDuesText) {
+        outstandingDuesText.innerText = `৳ ${englishToBanglaNum(totalDuesSum.toString())}`;
+    }
+
+    if (filteredMembers.length === 0) {
+        container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">কোনো সদস্যের রেকর্ড মেলেনি।</div>';
+        return;
+    }
+
+    filteredMembers.forEach(m => {
+        const item = document.createElement('div');
+        item.className = 'member-card';
+        
+        item.onclick = () => openMemberDetails(m.id);
+
+        const firstChar = m.name.trim().charAt(0);
+        const dueAmount = calculateMemberTotalDue(m.id);
+        const advanceAmount = parseFloat(m.advance_balance || 0);
+        const hasDue = dueAmount > 0;
+
+        let badgeClass = 'general';
+        let badgeLabel = 'সাধারণ';
+        if (m.member_type === 'Poor') { badgeClass = 'poor'; badgeLabel = 'দরিদ্র'; }
+        else if (m.member_type === 'Free') { badgeClass = 'free'; badgeLabel = 'ফ্রি'; }
+
+        let dueDisplay = '';
+        if (advanceAmount > 0) {
+            dueDisplay = `
+                <div class="due-label" style="color: var(--success-color);">অগ্রিম জমা</div>
+                <div class="due-val success" style="color: var(--success-color); font-weight: bold;">
+                    ৳ ${englishToBanglaNum(advanceAmount.toFixed(2))}
+                </div>
+            `;
+        } else {
+            dueDisplay = `
+                <div class="due-label">বকেয়া পরিমাণ</div>
+                <div class="due-val ${hasDue ? 'danger' : 'success'}">
+                    ${hasDue ? '৳ ' + englishToBanglaNum(dueAmount.toString()) : 'পরিশোধিত'}
+                </div>
+            `;
+        }
+
+        item.innerHTML = `
+            <div class="member-info">
+                <div class="member-avatar">${firstChar}</div>
+                <div>
+                    <div class="member-name" style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+                        <span style="font-size: 11px; background-color: var(--primary-light); color: var(--primary-dark); padding: 2px 6px; border-radius: 10px; font-weight: bold; border: 1px solid var(--primary-color);">নং: ${englishToBanglaNum(m.id.replace('member-', ''))}</span>
+                        ${m.name}
+                        ${advanceAmount > 0 ? `<span style="font-size: 10px; background-color: var(--success-color); color: white; padding: 2px 6px; border-radius: 10px; font-weight: normal;">অগ্রিম: ৳ ${englishToBanglaNum(advanceAmount.toFixed(0))}</span>` : ''}
+                    </div>
+                    <div class="member-phone">
+                        <i class="fa-solid fa-phone"></i> ${englishToBanglaNum(m.phone)}
+                    </div>
+                    <span class="member-type-badge ${badgeClass}">${badgeLabel} - ৳ ${englishToBanglaNum(m.monthly_fee.toString())}</span>
+                    ${m.status === 'Suspended' ? '<span class="member-type-badge" style="background-color: #fd7e14; color: #fff; margin-left: 4px;">স্থগিত</span>' : ''}
+                </div>
+            </div>
+            <div class="member-due-status">
+                ${dueDisplay}
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
+
+function filterMembers() {
+    renderMembersList();
+}
+
+function setMemberFilter(filter, el) {
+    state.memberFilter = filter;
+    const chips = el.parentNode.querySelectorAll('.filter-chip');
+    chips.forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    renderMembersList();
+}
+
+// Calculate Total Due for a Member
+function calculateMemberTotalDue(memberId) {
+    const member = state.members.find(m => m.id === memberId);
+    if (!member || member.member_type === 'Free' || member.status === 'Pending') return 0;
+
+    let totalExpected = 0;
+    let totalPaid = 0;
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    const joinParts = member.join_date.split('-');
+    const joinYear = parseInt(joinParts[0]);
+    const joinMonth = parseInt(joinParts[1]);
+
+    for (let year = joinYear; year <= currentYear; year++) {
+        const startM = year === joinYear ? joinMonth : 1;
+        const endM = year === currentYear ? currentMonth : 12;
+
+        for (let m = startM; m <= endM; m++) {
+            const sub = state.subscriptions.find(s => s.member_id === memberId && s.year === year && s.month === m);
+            totalExpected += member.monthly_fee;
+            if (sub) {
+                totalPaid += parseFloat(sub.amount_paid);
+            }
+        }
+    }
+
+    const openingArrears = parseFloat(member.opening_arrears || 0);
+    const due = (totalExpected + openingArrears) - totalPaid;
+    return due > 0 ? due : 0;
+}
+
+// Modal management
+function openModal(modalId) {
+    document.getElementById(modalId).classList.add('active');
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+function closeModalOnOverlay(e) {
+    if (e.target.classList.contains('modal-overlay')) {
+        e.target.classList.remove('active');
+    }
+}
+
+// Add Member Fee Auto Adjuster
+function adjustFeeAmountInput() {
+    const type = document.getElementById('mType').value;
+    const customFee = document.getElementById('mCustomFee');
+    if (type === 'General') customFee.value = 150;
+    else if (type === 'Poor') customFee.value = 100;
+    else if (type === 'Free') customFee.value = 0;
+}
+
+// Add / Edit Member Form
+function handleNewMemberSubmit(e) {
+    e.preventDefault();
+    const role = state.currentUser.role;
+    
+    if (role !== 'admin' && role !== 'secretary') {
+        alert("আপনার সদস্য যোগ করার অনুমতি নেই!");
+        return;
+    }
+
+    const editId = document.getElementById('editMemberId').value;
+    const name = document.getElementById('mName').value.trim();
+    const phone = document.getElementById('mPhone').value.trim();
+    const address = document.getElementById('mAddress').value.trim();
+    
+    let type = 'General';
+    let fee = 150;
+    
+    if (role === 'admin') {
+        type = document.getElementById('mType').value;
+        fee = parseFloat(document.getElementById('mCustomFee').value);
+    }
+
+    if (editId) {
+        const mIndex = state.members.findIndex(m => m.id === editId);
+        if (mIndex !== -1) {
+            state.members[mIndex].name = name;
+            state.members[mIndex].phone = phone;
+            state.members[mIndex].address = address;
+            
+            if (role === 'admin') {
+                state.members[mIndex].member_type = type;
+                state.members[mIndex].monthly_fee = fee;
+            }
+            
+            saveState();
+            closeModal('add-member-modal');
+            refreshAppUI();
+            alert("সদস্যের তথ্য সফলভাবে সংশোধন করা হয়েছে।");
+        }
+    } else {
+        const exists = state.members.some(m => m.phone === phone);
+        if (exists) {
+            alert("এই মোবাইল নম্বর দিয়ে অলরেডি একজন সদস্য রেজিস্টার করা আছে!");
+            return;
+        }
+
+        const newId = 'member-' + (state.members.length + 1);
+        const initialStatus = role === 'admin' ? 'Active' : 'Pending';
+
+        const newMember = {
+            id: newId,
+            name: name,
+            phone: phone,
+            address: address,
+            member_type: type,
+            monthly_fee: fee,
+            status: initialStatus,
+            join_date: new Date().toISOString().split('T')[0]
+        };
+
+        state.members.push(newMember);
+
+        if (initialStatus === 'Active') {
+            const now = new Date();
+            const currentMonth = now.getMonth() + 1;
+            const currentYear = now.getFullYear();
+
+            state.subscriptions.push({
+                id: `sub-${newId}-${currentYear}-${currentMonth}`,
+                member_id: newId,
+                year: currentYear,
+                month: currentMonth,
+                amount_paid: 0,
+                due_amount: fee,
+                status: type === 'Free' ? 'Free' : 'Unpaid',
+                last_payment_date: ''
+            });
+        }
+
+        saveState();
+        closeModal('add-member-modal');
+        
+        document.getElementById('newMemberForm').reset();
+        document.getElementById('editMemberId').value = '';
+        adjustFeeAmountInput();
+        
+        refreshAppUI();
+        
+        if (initialStatus === 'Pending') {
+            alert("নতুন সদস্যের আবেদন যুক্ত করা হয়েছে। এটি এডমিনের অনুমোদনের পর চূড়ান্ত তালিকায় যুক্ত হবে।");
+        } else {
+            alert("নতুন সদস্য সফলভাবে সরাসরি যুক্ত করা হয়েছে।");
+        }
+    }
+}
+
+// Open Member Details (Hides monthly calendar grid as requested)
+function openMemberDetails(memberId) {
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+
+    state.activeMemberId = memberId;
+
+    document.getElementById('mdModalName').innerText = member.name;
+    document.getElementById('mdModalPhone').innerHTML = `<i class="fa-solid fa-phone"></i> ${englishToBanglaNum(member.phone)}`;
+    document.getElementById('mdModalAddress').innerHTML = `<i class="fa-solid fa-location-dot"></i> ${member.address}`;
+    
+    let typeClass = 'general';
+    let typeLabel = 'সাধারণ সদস্য';
+    if (member.member_type === 'Poor') { typeClass = 'poor'; typeLabel = 'দরিদ্র সদস্য'; }
+    else if (member.member_type === 'Free') { typeClass = 'free'; typeLabel = 'ফ্রি সদস্য (মওকুফ)'; }
+    
+    document.getElementById('mdModalType').innerHTML = `<span class="member-type-badge ${typeClass}">${typeLabel}</span>`;
+    
+    const totalDue = calculateMemberTotalDue(memberId);
+    const advanceVal = parseFloat(member.advance_balance || 0);
+
+    if (advanceVal > 0) {
+        document.getElementById('mdModalTotalDue').innerHTML = `<div style="text-align: right;"><span class="text-muted" style="text-decoration: line-through; font-size: 13px; display: block; margin-bottom: 2px; color: var(--text-muted) !important;">বকেয়া: ৳ ০.০০</span><span style="color: var(--success-color); font-size: 18px; font-weight: bold; display: block;">অগ্রিম জমা: ৳ ${englishToBanglaNum(advanceVal.toFixed(2))}</span></div>`;
+    } else {
+        document.getElementById('mdModalTotalDue').innerText = `৳ ${englishToBanglaNum(totalDue.toFixed(2))}`;
+        document.getElementById('mdModalTotalDue').className = totalDue > 0 ? 'text-danger' : 'text-success';
+    }
+
+    const editBtn = document.getElementById('mdEditBtn');
+    editBtn.onclick = () => {
+        closeModal('member-details-modal');
+        openEditMemberForm(member.id);
+    };
+
+    const deleteBtn = document.getElementById('mdDeleteBtn');
+    deleteBtn.onclick = () => {
+        closeModal('member-details-modal');
+        deleteMember(member.id);
+    };
+
+    const role = state.currentUser.role;
+    const canCollect = role === 'cashier';
+    const easyPay = document.getElementById('easyPaymentPanel');
+    const presPanel = document.getElementById('presidentWaiverPanel');
+    
+    // Only cashier can collect regular subscription payments
+    if (canCollect && member.member_type !== 'Free') {
+        easyPay.style.display = 'block';
+        document.getElementById('epMemberId').value = memberId;
+        document.getElementById('epTotalDueHidden').value = totalDue;
+        document.getElementById('epAmount').value = '';
+        document.getElementById('epAmount').removeAttribute('max'); // Remove max limit so they can pay any amount!
+        document.getElementById('epReceiptNo').value = '';
+        
+        // Programmatically bind events for absolute cross-browser reliability
+        const epAmountInput = document.getElementById('epAmount');
+        if (epAmountInput) {
+            epAmountInput.removeEventListener('input', calculateRealtimeNextDue);
+            epAmountInput.removeEventListener('keyup', calculateRealtimeNextDue);
+            epAmountInput.removeEventListener('change', calculateRealtimeNextDue);
+            
+            epAmountInput.addEventListener('input', calculateRealtimeNextDue);
+            epAmountInput.addEventListener('keyup', calculateRealtimeNextDue);
+            epAmountInput.addEventListener('change', calculateRealtimeNextDue);
+        }
+        
+        calculateRealtimeNextDue();
+    } else {
+        easyPay.style.display = 'none';
+    }
+
+    // Only President can see and apply fee waivers
+    if (role === 'president' && member.member_type !== 'Free' && totalDue > 0) {
+        if (presPanel) {
+            presPanel.style.display = 'block';
+            document.getElementById('wpMemberId').value = memberId;
+            document.getElementById('wpAmount').value = '';
+            document.getElementById('wpAmount').max = totalDue;
+            document.getElementById('wpReason').value = '';
+        }
+    } else {
+        if (presPanel) presPanel.style.display = 'none';
+    }
+
+    // Only Secretary and Admin can see and apply arrears adjustments (increase/decrease)
+    const secPanel = document.getElementById('secretaryArrearsPanel');
+    if ((role === 'admin' || role === 'secretary') && member.member_type !== 'Free') {
+        if (secPanel) {
+            secPanel.style.display = 'block';
+            document.getElementById('adjMemberId').value = memberId;
+            document.getElementById('adjAmount').value = '';
+            document.getElementById('adjReason').value = '';
+        }
+    } else {
+        if (secPanel) secPanel.style.display = 'none';
+    }
+
+    // Render dynamic action buttons in details modal
+    const actionSection = document.getElementById('mdActionButtonsSection');
+    if (actionSection) {
+        actionSection.innerHTML = '';
+        
+        // 1. Suspend / Activate button for General Secretary and Admin
+        if (role === 'secretary' || role === 'admin') {
+            const isSuspended = member.status === 'Suspended';
+            const suspendBtn = document.createElement('button');
+            suspendBtn.className = isSuspended ? 'btn btn-primary' : 'btn btn-secondary';
+            suspendBtn.style.backgroundColor = isSuspended ? '#28a745' : '#fd7e14';
+            suspendBtn.style.borderColor = isSuspended ? '#28a745' : '#fd7e14';
+            suspendBtn.style.color = '#fff';
+            suspendBtn.style.fontWeight = 'bold';
+            suspendBtn.innerHTML = isSuspended ? '<i class="fa-solid fa-user-check"></i> সদস্যপদ সক্রিয় করুন' : '<i class="fa-solid fa-user-slash"></i> সদস্যপদ স্থগিত করুন';
+            suspendBtn.onclick = () => {
+                toggleMemberSuspension(member.id);
+            };
+            actionSection.appendChild(suspendBtn);
+        }
+
+        // 2. Deletion Requests & Soft Deletion Approval
+        if (role === 'admin') {
+            if (member.delete_requested) {
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.gap = '8px';
+                
+                const approveBtn = document.createElement('button');
+                approveBtn.className = 'btn btn-primary';
+                approveBtn.style.flex = '1';
+                approveBtn.style.backgroundColor = '#dc3545';
+                approveBtn.style.borderColor = '#dc3545';
+                approveBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> ডিলিট অনুমোদন';
+                approveBtn.onclick = () => {
+                    approveDeletionRequest(member.id);
+                };
+
+                const rejectBtn = document.createElement('button');
+                rejectBtn.className = 'btn btn-secondary';
+                rejectBtn.style.flex = '1';
+                rejectBtn.innerHTML = '<i class="fa-solid fa-xmark"></i> বাতিল করুন';
+                rejectBtn.onclick = () => {
+                    rejectDeletionRequest(member.id);
+                };
+
+                row.appendChild(approveBtn);
+                row.appendChild(rejectBtn);
+                actionSection.appendChild(row);
+            }
+        } else if (role === 'secretary') {
+            // Only General Secretary can request deletion
+            if (member.delete_requested) {
+                const pendingLabel = document.createElement('button');
+                pendingLabel.className = 'btn btn-secondary';
+                pendingLabel.disabled = true;
+                pendingLabel.style.backgroundColor = '#ffc107';
+                pendingLabel.style.borderColor = '#ffc107';
+                pendingLabel.style.color = '#000';
+                pendingLabel.style.fontWeight = 'bold';
+                pendingLabel.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ডিলিট আবেদন পেন্ডিং রয়েছে';
+                actionSection.appendChild(pendingLabel);
+            } else {
+                const requestBtn = document.createElement('button');
+                requestBtn.className = 'btn btn-secondary';
+                requestBtn.style.borderColor = '#dc3545';
+                requestBtn.style.color = '#dc3545';
+                requestBtn.style.background = 'white';
+                requestBtn.innerHTML = '<i class="fa-solid fa-trash-can-arrow-up"></i> সদস্য বাতিল (ডিলিট) আবেদন করুন';
+                requestBtn.onclick = () => {
+                    requestMemberDeletion(member.id);
+                };
+                actionSection.appendChild(requestBtn);
+            }
+        }
+    }
+
+    openModal('member-details-modal');
+}
+
+// Real-time "Next Due" calculation (with defensive DB fallback and NaN safety)
+function calculateRealtimeNextDue() {
+    const totalDueEl = document.getElementById('epTotalDueHidden');
+    const epAmountEl = document.getElementById('epAmount');
+    const epNextDueTextEl = document.getElementById('epNextDueText');
+    
+    if (!epNextDueTextEl) return;
+    
+    let totalDue = totalDueEl ? parseFloat(totalDueEl.value) : NaN;
+    if (isNaN(totalDue)) {
+        const member = state.members.find(m => m.id === state.activeMemberId);
+        totalDue = member ? calculateMemberTotalDue(member.id) : 0;
+    }
+    
+    const paidInput = epAmountEl ? parseFloat(epAmountEl.value) : 0;
+    const nextDue = totalDue - (isNaN(paidInput) ? 0 : paidInput);
+    
+    if (nextDue < 0) {
+        const advanceCredit = Math.abs(nextDue);
+        epNextDueTextEl.innerHTML = `<span style="color: var(--success-color); font-weight: bold;">৳ ০.০০ (অগ্রিম জমা: ৳ ${englishToBanglaNum(advanceCredit.toFixed(2))})</span>`;
+    } else {
+        const finalNextDue = nextDue > 0 ? nextDue : 0;
+        epNextDueTextEl.innerHTML = `<span style="color: var(--primary-color); font-weight: bold;">৳ ${englishToBanglaNum(finalNextDue.toFixed(2))}</span>`;
+    }
+}
+
+// Handle Easy Payment Submission
+function handleEasyPaymentSubmit(e) {
+    e.preventDefault();
+
+    const memberId = document.getElementById('epMemberId').value;
+    const totalPaid = parseFloat(document.getElementById('epAmount').value);
+    const receiptNo = document.getElementById('epReceiptNo').value.trim();
+    const date = document.getElementById('epDate').value;
+    const mode = 'CASH'; // Default mode is Cash
+
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+
+    if (totalPaid <= 0) {
+        alert("দয়া করে সঠিক অর্থ পরিশোধ এন্ট্রি দিন!");
+        return;
+    }
+
+    let remainingPaid = totalPaid;
+    const currentYear = 2026;
+    const now = new Date();
+    const currentMonthLimit = now.getMonth() + 1;
+
+    const joinParts = member.join_date.split('-');
+    const joinYear = parseInt(joinParts[0]);
+    const joinMonth = parseInt(joinParts[1]);
+
+    for (let year = joinYear; year <= currentYear && remainingPaid > 0; year++) {
+        const startM = year === joinYear ? joinMonth : 1;
+        const endM = year === currentYear ? currentMonthLimit : 12;
+
+        for (let m = startM; m <= endM && remainingPaid > 0; m++) {
+            let sub = state.subscriptions.find(s => s.member_id === memberId && s.year === year && s.month === m);
+            if (!sub) {
+                sub = {
+                    id: `sub-${memberId}-${year}-${m}`,
+                    member_id: memberId,
+                    year: year,
+                    month: m,
+                    amount_paid: 0,
+                    due_amount: member.monthly_fee,
+                    status: 'Unpaid',
+                    last_payment_date: ''
+                };
+                state.subscriptions.push(sub);
+            }
+
+            const currentDue = member.monthly_fee - parseFloat(sub.amount_paid);
+            if (currentDue > 0) {
+                const payForThisMonth = Math.min(remainingPaid, currentDue);
+                
+                sub.amount_paid = parseFloat(sub.amount_paid) + payForThisMonth;
+                sub.due_amount = member.monthly_fee - sub.amount_paid;
+                sub.status = sub.due_amount <= 0 ? 'Paid' : 'Partial';
+                sub.last_payment_date = date;
+                sub.receipt_no = receiptNo;
+
+                remainingPaid -= payForThisMonth;
+            }
+        }
+    }
+
+    let descriptionText = `${member.name} - চাঁদা আদায় (রশিদ নং: ${englishToBanglaNum(receiptNo)})`;
+    if (remainingPaid > 0) {
+        member.advance_balance = parseFloat(member.advance_balance || 0) + remainingPaid;
+        descriptionText += ` [অগ্রিম জমা: ৳ ${englishToBanglaNum(remainingPaid.toFixed(2))}]`;
+        // Apply this new advance balance immediately to any future months
+        processAdvanceDeductions();
+    }
+
+    const txId = 'tx-sub-' + Date.now();
+    state.transactions.unshift({
+        id: txId,
+        transaction_type: 'INCOME',
+        category: 'Subscription',
+        amount: totalPaid,
+        payment_mode: mode,
+        description: descriptionText,
+        date: date,
+        member_id: memberId,
+        receipt_no: receiptNo,
+        created_by: state.currentUser.role,
+        created_at: new Date().toISOString()
+    });
+
+    saveState();
+    closeModal('member-details-modal');
+    refreshAppUI();
+    
+    if (remainingPaid > 0) {
+        alert(`৳ ${englishToBanglaNum(totalPaid.toString())} চাঁদা আদায় সফল হয়েছে। এর মধ্যে ৳ ${englishToBanglaNum(remainingPaid.toFixed(2))} সদস্যের অ্যাকাউন্টে অগ্রিম হিসেবে জমা রাখা হয়েছে।`);
+    } else {
+        alert(`৳ ${englishToBanglaNum(totalPaid.toString())} চাঁদা আদায় সফলভাবে রশিদ নম্বর ${englishToBanglaNum(receiptNo)} সহ রেকর্ড করা হয়েছে।`);
+    }
+}
+
+// Helper to print or download PDF (Mobile friendly)
+function triggerPrint(elementId, filename, bodyClass) {
+    // Both Desktop and Mobile will use native browser print. 
+    // Modern mobile browsers natively handle printing to PDF perfectly with exact CSS.
+    setTimeout(() => {
+        window.print();
+        setTimeout(() => {
+            if(bodyClass) document.body.classList.remove(bodyClass);
+        }, 1000);
+    }, 300);
+}
+
+// Generate A4 Arrears List Pad
+function printArrearsList() {
+    const tbody = document.getElementById('printArrearsTableBody');
+    tbody.innerHTML = '';
+    
+    // Filter active and suspended members with due
+    let dueMembers = state.members.filter(m => (m.status === 'Active' || m.status === 'Suspended') && calculateMemberTotalDue(m.id) > 0);
+    
+    // Sort descending by due amount
+    dueMembers.sort((a, b) => calculateMemberTotalDue(b.id) - calculateMemberTotalDue(a.id));
+    
+    if (dueMembers.length === 0) {
+        alert('বর্তমানে কোনো সদস্যের বকেয়া নেই!');
+        return;
+    }
+    
+    let totalDue = 0;
+    
+    dueMembers.forEach((m, index) => {
+        const due = calculateMemberTotalDue(m.id);
+        totalDue += due;
+        
+        tbody.innerHTML += `
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: center;">${englishToBanglaNum((index + 1).toString())}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important;">${m.name}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important;">${englishToBanglaNum(m.phone)}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: center; font-weight: bold; color: red;">৳ ${englishToBanglaNum(due.toFixed(2))}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important;"></td>
+            </tr>
+        `;
+    });
+    
+    // Add total row
+    tbody.innerHTML += `
+        <tr style="background-color: #f2f2f2; font-weight: bold;">
+            <td colspan="3" style="border: 1px solid #000 !important; padding: 6px !important; text-align: right;">সর্বমোট বকেয়া:</td>
+            <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: center; color: red;">৳ ${englishToBanglaNum(totalDue.toFixed(2))}</td>
+            <td style="border: 1px solid #000 !important; padding: 6px !important;"></td>
+        </tr>
+    `;
+    
+    document.body.classList.remove('print-active-member', 'print-active-inst', 'print-active-arrears', 'print-active-full');
+    document.body.classList.add('print-active-arrears');
+    triggerPrint('printableArrearsListArea', 'Arrears_List', 'print-active-arrears');
+}
+
+// Generate A4 Yearly Report & trigger printing (MEMBER ONLY details, NO pad header/logo)
+function generateYearlyPrintReport() {
+    const memberId = state.activeMemberId;
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+
+    // Load printable text elements matching precise user format request
+    document.getElementById('printName').innerText = member.name;
+    document.getElementById('printPhone').innerText = englishToBanglaNum(member.phone);
+    document.getElementById('printAddress').innerText = member.address;
+
+    let typeLabel = 'সাধারণ সদস্য';
+    if (member.member_type === 'Poor') { typeLabel = 'দরিদ্র সদস্য'; }
+    else if (member.member_type === 'Free') { typeLabel = 'ফ্রি সদস্য (মওকুফ)'; }
+    document.getElementById('printType').innerText = typeLabel;
+
+    const advanceVal = parseFloat(member.advance_balance || 0);
+    document.getElementById('printAdvance').innerText = englishToBanglaNum(advanceVal.toFixed(2));
+
+    // Find the furthest month paid (including advance allocations)
+    let lastPaidMonthStr = '—';
+    const memberSubs = state.subscriptions.filter(s => s.member_id === memberId && s.status === 'Paid');
+    if (memberSubs.length > 0) {
+        memberSubs.sort((a, b) => {
+            if (a.year !== b.year) return a.year - b.year;
+            return a.month - b.month;
+        });
+        const lastSub = memberSubs[memberSubs.length - 1];
+        lastPaidMonthStr = `${BANGLA_MONTHS[lastSub.month]} ${englishToBanglaNum(lastSub.year.toString())} পর্যন্ত`;
+    }
+    document.getElementById('printPaidUpTo').innerText = lastPaidMonthStr;
+
+    // Table rows Jan-Dec 2026
+    const tableBody = document.getElementById('printTableBody');
+    tableBody.innerHTML = '';
+    const currentYear = 2026;
+    
+    for (let m = 1; m <= 12; m++) {
+        const sub = state.subscriptions.find(s => s.member_id === memberId && s.year === currentYear && s.month === m);
+        
+        let rate = member.monthly_fee;
+        let paid = 0;
+        let due = member.member_type === 'Free' ? 0 : rate;
+        let dateStr = '—';
+        let recNo = '—';
+
+        if (sub) {
+            paid = parseFloat(sub.amount_paid);
+            due = parseFloat(sub.due_amount);
+            dateStr = sub.last_payment_date ? formatDate(sub.last_payment_date) : '—';
+            recNo = sub.receipt_no ? englishToBanglaNum(sub.receipt_no) : '—';
+        }
+
+        if (member.member_type === 'Free') {
+            due = 0;
+            paid = 0;
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="text-align: center;">${BANGLA_MONTHS[m]}</td>
+            <td style="text-align: right;">${englishToBanglaNum(rate.toString())}</td>
+            <td style="text-align: right;">${englishToBanglaNum(paid.toString())}</td>
+            <td style="text-align: right;">${englishToBanglaNum(due.toString())}</td>
+            <td style="text-align: center;">${dateStr}</td>
+            <td style="text-align: center;">${recNo}</td>
+        `;
+        tableBody.appendChild(tr);
+    }
+
+    // Set class to print ONLY member sheet, and print
+    document.body.classList.remove('print-active-member', 'print-active-inst', 'print-active-arrears', 'print-active-full');
+    document.body.classList.add('print-active-member');
+    triggerPrint('printableMemberReceiptArea', 'Member_Receipt_' + member.name, 'print-active-member');
+}
+
+// Generate A4 Institution Monthly Report (Pad header, logo and financial summary included)
+function generateInstitutionPrintReport() {
+    const selectMonth = parseInt(document.getElementById('reportMonth').value);
+    const selectYear = parseInt(document.getElementById('reportYear').value);
+
+    // Apply Settings
+    applySettingsToUI();
+
+    document.getElementById('printInstMonth').innerText = `${BANGLA_MONTHS[selectMonth]} ${englishToBanglaNum(selectYear.toString())}`;
+    document.getElementById('printInstToday').innerText = formatDate(new Date().toISOString().split('T')[0]);
+
+    let monthlyInc = 0;
+    let monthlyExp = 0;
+
+    // Build Side-by-Side Incomes and Expenses Lists (Individual Transactions)
+    const incomeList = [];
+    const expenseList = [];
+
+    state.transactions.forEach(tx => {
+        const parts = tx.date.split('-');
+        const y = parseInt(parts[0]);
+        const m = parseInt(parts[1]);
+
+        if (m === selectMonth && y === selectYear) {
+            const val = parseFloat(tx.amount);
+            const desc = tx.description || CATEGORIES_BN[tx.category] || tx.category;
+            
+            if (tx.transaction_type === 'INCOME') {
+                monthlyInc += val;
+                incomeList.push({
+                    date: tx.date,
+                    description: desc,
+                    amount: val
+                });
+            } else if (tx.transaction_type === 'EXPENSE') {
+                monthlyExp += val;
+                expenseList.push({
+                    date: tx.date,
+                    description: desc,
+                    amount: val
+                });
+            }
+        }
+    });
+
+    const net = monthlyInc - monthlyExp;
+
+    // Load printable stats
+    document.getElementById('printInstTotalIncome').innerText = `৳ ${englishToBanglaNum(monthlyInc.toFixed(2))}`;
+    document.getElementById('printInstTotalExpense').innerText = `৳ ${englishToBanglaNum(monthlyExp.toFixed(2))}`;
+    document.getElementById('printInstNetBalance').innerText = `${net >= 0 ? '+' : '-'}৳ ${englishToBanglaNum(Math.abs(net).toFixed(2))}`;
+    document.getElementById('printInstNetBalance').style.color = net >= 0 ? 'green' : 'red';
+
+    // Sort by date ascending (chronological order)
+    incomeList.sort((a, b) => new Date(a.date) - new Date(b.date));
+    expenseList.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const maxRows = Math.max(incomeList.length, expenseList.length);
+    const tableBody = document.getElementById('printInstTableBody');
+    tableBody.innerHTML = '';
+
+    if (maxRows === 0) {
+        tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; border: 1px solid #000 !important; padding: 10px !important;">এই মাসে কোনো আর্থিক লেনদেন সম্পন্ন হয়নি।</td></tr>';
+    } else {
+        for (let i = 0; i < maxRows; i++) {
+            const tr = document.createElement('tr');
+            
+            let incDate = '—';
+            let incName = '—';
+            let incVal = '—';
+            let expDate = '—';
+            let expName = '—';
+            let expVal = '—';
+
+            if (i < incomeList.length) {
+                const item = incomeList[i];
+                incDate = formatShortDateBN(item.date);
+                incName = item.description;
+                incVal = `৳ ${englishToBanglaNum(item.amount.toFixed(2))}`;
+            }
+
+            if (i < expenseList.length) {
+                const item = expenseList[i];
+                expDate = formatShortDateBN(item.date);
+                expName = item.description;
+                expVal = `৳ ${englishToBanglaNum(item.amount.toFixed(2))}`;
+            }
+
+            tr.innerHTML = `
+                <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: center; white-space: nowrap;">${incDate}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important; word-wrap: break-word; word-break: break-word;">${incName}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: right; white-space: nowrap;">${incVal}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: center; white-space: nowrap;">${expDate}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important; word-wrap: break-word; word-break: break-word;">${expName}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: right; white-space: nowrap;">${expVal}</td>
+            `;
+            tableBody.appendChild(tr);
+        }
+    }
+
+    // Set Footer Totals
+    document.getElementById('printInstFooterTotalIncome').innerText = `৳ ${englishToBanglaNum(monthlyInc.toFixed(2))}`;
+    document.getElementById('printInstFooterTotalExpense').innerText = `৳ ${englishToBanglaNum(monthlyExp.toFixed(2))}`;
+
+    // Set class to print ONLY Institution Report pad, and print
+    document.body.classList.remove('print-active-member', 'print-active-inst', 'print-active-arrears', 'print-active-full');
+    document.body.classList.add('print-active-inst');
+    triggerPrint('printableInstitutionReceiptArea', 'Institution_Report_' + BANGLA_MONTHS[selectMonth], 'print-active-inst');
+}
+
+// Generate A4 Full Institution Monthly Report (Includes Eza/Previous Balance)
+function generateFullInstitutionPrintReport() {
+    const selectMonth = parseInt(document.getElementById('reportMonth').value);
+    const selectYear = parseInt(document.getElementById('reportYear').value);
+
+    // Apply Settings
+    applySettingsToUI();
+
+    document.getElementById('printFullInstMonth').innerText = `${BANGLA_MONTHS[selectMonth]} ${englishToBanglaNum(selectYear.toString())}`;
+    document.getElementById('printFullInstToday').innerText = formatDate(new Date().toISOString().split('T')[0]);
+
+    let monthlyInc = 0;
+    let monthlyExp = 0;
+    let ezaIncome = 0;
+    let ezaExpense = 0;
+
+    const startOfSelectedMonth = new Date(selectYear, selectMonth - 1, 1);
+
+    // Build Side-by-Side Incomes and Expenses Lists (Individual Transactions)
+    const incomeList = [];
+    const expenseList = [];
+
+    state.transactions.forEach(tx => {
+        const parts = tx.date.split('-');
+        const y = parseInt(parts[0]);
+        const m = parseInt(parts[1]);
+        const txDate = new Date(y, m - 1, parseInt(parts[2]));
+        const val = parseFloat(tx.amount);
+
+        // Calculate Eza (transactions before selected month)
+        if (txDate < startOfSelectedMonth) {
+            if (tx.transaction_type === 'INCOME') ezaIncome += val;
+            else if (tx.transaction_type === 'EXPENSE') ezaExpense += val;
+        } 
+        // Current month transactions
+        else if (m === selectMonth && y === selectYear) {
+            const desc = tx.description || CATEGORIES_BN[tx.category] || tx.category;
+            
+            if (tx.transaction_type === 'INCOME') {
+                monthlyInc += val;
+                incomeList.push({
+                    date: tx.date,
+                    description: desc,
+                    amount: val
+                });
+            } else if (tx.transaction_type === 'EXPENSE') {
+                monthlyExp += val;
+                expenseList.push({
+                    date: tx.date,
+                    description: desc,
+                    amount: val
+                });
+            }
+        }
+    });
+
+    const ezaAmount = ezaIncome - ezaExpense;
+    const ezaLabel = 'ইজা (পূর্ববর্তী জের / গতমাসের ব্যালেন্স)';
+
+    // Add Eza to current month income
+    monthlyInc += ezaAmount;
+
+    // Push Eza as the LAST entry in the income list visually, but practically it's part of income
+    // The user requested it to be the last row. We will handle this during DOM construction.
+
+    const net = monthlyInc - monthlyExp;
+
+    // Load printable stats
+    document.getElementById('printFullInstTotalIncome').innerText = `৳ ${englishToBanglaNum(monthlyInc.toFixed(2))}`;
+    document.getElementById('printFullInstTotalExpense').innerText = `৳ ${englishToBanglaNum(monthlyExp.toFixed(2))}`;
+    document.getElementById('printFullInstNetBalance').innerText = `${net >= 0 ? '+' : '-'}৳ ${englishToBanglaNum(Math.abs(net).toFixed(2))}`;
+    document.getElementById('printFullInstNetBalance').style.color = net >= 0 ? 'green' : 'red';
+    
+    document.getElementById('printFullInstFooterTotalIncome').innerText = `৳ ${englishToBanglaNum(monthlyInc.toFixed(2))}`;
+    document.getElementById('printFullInstFooterTotalExpense').innerText = `৳ ${englishToBanglaNum(monthlyExp.toFixed(2))}`;
+
+    // Sort by date ascending (chronological order)
+    incomeList.sort((a, b) => new Date(a.date) - new Date(b.date));
+    expenseList.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Calculate max rows including the extra Eza row on the income side
+    const incomeRowsCount = incomeList.length + 1; // +1 for Eza
+    const maxRows = Math.max(incomeRowsCount, expenseList.length);
+    const tableBody = document.getElementById('printFullInstTableBody');
+    tableBody.innerHTML = '';
+
+    if (maxRows === 0) {
+        tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; border: 1px solid #000 !important; padding: 10px !important;">কোনো আর্থিক তথ্য পাওয়া যায়নি।</td></tr>';
+    } else {
+        for (let i = 0; i < maxRows; i++) {
+            const tr = document.createElement('tr');
+            
+            let incDate = '—';
+            let incName = '—';
+            let incVal = '—';
+            let expDate = '—';
+            let expName = '—';
+            let expVal = '—';
+
+            // Fill Income Side
+            if (i < incomeList.length) {
+                const item = incomeList[i];
+                incDate = formatShortDateBN(item.date);
+                incName = item.description;
+                incVal = `৳ ${englishToBanglaNum(item.amount.toFixed(2))}`;
+            } else if (i === incomeList.length) {
+                // The row immediately following the normal incomes is Eza
+                incDate = '—';
+                incName = `<span style="font-weight: bold; color: #0f5132;">${ezaLabel}</span>`;
+                incVal = `<span style="font-weight: bold; color: #0f5132;">৳ ${englishToBanglaNum(ezaAmount.toFixed(2))}</span>`;
+            }
+
+            // Fill Expense Side
+            if (i < expenseList.length) {
+                const item = expenseList[i];
+                expDate = formatShortDateBN(item.date);
+                expName = item.description;
+                expVal = `৳ ${englishToBanglaNum(item.amount.toFixed(2))}`;
+            }
+
+            tr.innerHTML = `
+                <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: center;">${incDate}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important;">${incName}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: right; font-weight: bold;">${incVal}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: center;">${expDate}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important;">${expName}</td>
+                <td style="border: 1px solid #000 !important; padding: 6px !important; text-align: right; font-weight: bold; color: red;">${expVal}</td>
+            `;
+            tableBody.appendChild(tr);
+        }
+    }
+
+    // Set class to print ONLY Full Institution Report pad, and print
+    document.body.classList.remove('print-active-member', 'print-active-inst', 'print-active-arrears', 'print-active-full');
+    document.body.classList.add('print-active-full');
+    triggerPrint('printableFullInstitutionReceiptArea', 'Full_Institution_Report_' + BANGLA_MONTHS[selectMonth], 'print-active-full');
+}
+// Open Edit Member Form
+function openEditMemberForm(memberId) {
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+
+    document.getElementById('editMemberId').value = member.id;
+    document.getElementById('mName').value = member.name;
+    document.getElementById('mPhone').value = member.phone;
+    document.getElementById('mAddress').value = member.address;
+    
+    document.getElementById('addMemberModalTitle').innerText = 'সদস্যের তথ্য সংশোধন';
+    document.getElementById('saveMemberBtn').innerText = 'সংশোধন সংরক্ষণ করুন';
+
+    if (state.currentUser.role === 'admin') {
+        document.getElementById('mType').value = member.member_type;
+        document.getElementById('mCustomFee').value = member.monthly_fee;
+    }
+
+    openModal('add-member-modal');
+}
+
+// Reset member form
+document.getElementById('addMemberBtn').addEventListener('click', () => {
+    document.getElementById('editMemberId').value = '';
+    document.getElementById('newMemberForm').reset();
+    document.getElementById('addMemberModalTitle').innerText = 'নতুন সদস্য যুক্ত করুন';
+    document.getElementById('saveMemberBtn').innerText = 'সংরক্ষণ করুন';
+    adjustFeeAmountInput();
+});
+
+// Admin Only: Delete member
+function deleteMember(id) {
+    if (state.currentUser.role !== 'admin') {
+        alert("শুধুমাত্র এডমিন সদস্য বাতিল করতে পারবেন!");
+        return;
+    }
+
+    const member = state.members.find(m => m.id === id);
+    if (!member) return;
+
+    if (confirm(`আপনি কি নিশ্চিতভাবে "${member.name}"-কে সদস্য তালিকা থেকে বাদ দিতে চান?`)) {
+        member.status = 'Inactive';
+        saveState();
+        refreshAppUI();
+        alert("সদস্যকে সফলভাবে তালিকা থেকে বাদ দেওয়া হয়েছে।");
+    }
+}
+
+// Add Custom Income & Expense Transaction Form
+function setTxFormType(type) {
+    state.txFormType = type;
+    document.getElementById('txType').value = type;
+
+    const incBtn = document.getElementById('txTypeIncomeBtn');
+    const expBtn = document.getElementById('txTypeExpenseBtn');
+
+    if (type === 'INCOME') {
+        incBtn.className = 'btn btn-primary';
+        expBtn.className = 'btn btn-secondary';
+    } else {
+        incBtn.className = 'btn btn-secondary';
+        expBtn.className = 'btn btn-primary';
+    }
+
+    updateCategoryDropdown();
+}
+
+function updateCategoryDropdown() {
+    const dropdown = document.getElementById('txCategory');
+    if (!dropdown) return;
+    dropdown.innerHTML = '';
+
+    const incomeCats = [
+        { value: 'Jummah', label: 'জুমার চাঁদা' },
+        { value: 'Donation', label: 'অনুদান (দান)' },
+        { value: 'LandLease', label: 'জমির খাজনা/লিজ' },
+        { value: 'Admission', label: 'ভর্তি ফি (নতুন সদস্য)' },
+        { value: 'Others_Income', label: 'অন্যান্য আয়' }
+    ];
+
+    const expenseCats = [
+        { value: 'ElectricityBill', label: 'বিদ্যুৎ বিল' },
+        { value: 'ImamSalary', label: 'ইমাম সাহেবের বেতন' },
+        { value: 'MuazzinSalary', label: 'মুয়াজ্জিনের বেতন' },
+        { value: 'KhatibSalary', label: 'খতিবের বেতন' },
+        { value: 'Maintenance', label: 'মসজিদ সংস্কার/রক্ষণাবেক্ষণ' },
+        { value: 'Others_Expense', label: 'অন্যান্য ব্যয়' }
+    ];
+
+    const targetList = state.txFormType === 'INCOME' ? incomeCats : expenseCats;
+    targetList.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.value;
+        opt.innerText = c.label;
+        dropdown.appendChild(opt);
+    });
+
+    // Run verification immediately to sync the validation status
+    handleCategoryChange();
+}
+
+// Dynamically handle description field validation based on category selection
+function handleCategoryChange() {
+    const categorySelect = document.getElementById('txCategory');
+    const descLabel = document.getElementById('txDescriptionLabel');
+    const descInput = document.getElementById('txDescription');
+    
+    if (!categorySelect || !descLabel || !descInput) return;
+    
+    const category = categorySelect.value;
+    if (category === 'Others_Expense' || category === 'Others_Income') {
+        descLabel.innerHTML = 'বিবরণ (অবশ্যই লিখতে হবে) <span class="text-danger" style="color: var(--danger-color);">*</span>';
+        descInput.required = true;
+        descInput.placeholder = "এখানে ব্যয়ের বিবরণ বা কারণ বিস্তারিত লিখুন (বাধ্যতামূলক)...";
+        descInput.style.borderColor = 'var(--danger-color)';
+    } else {
+        descLabel.innerText = 'বিবরণ (ঐচ্ছিক)';
+        descInput.required = false;
+        descInput.placeholder = "লেনদেন সম্পর্কিত সংক্ষিপ্ত তথ্য...";
+        descInput.style.borderColor = 'var(--border-color)';
+    }
+}
+
+function handleTransactionSubmit(e) {
+    e.preventDefault();
+    
+    if (state.currentUser.role === 'secretary') {
+        alert("আপনার এই লেনদেন এন্ট্রি করার অনুমতি নেই!");
+        return;
+    }
+
+    const type = document.getElementById('txType').value;
+    const amount = parseFloat(document.getElementById('txAmount').value);
+    const category = document.getElementById('txCategory').value;
+    const mode = document.getElementById('txMode').value;
+    const date = document.getElementById('txDate').value;
+    const desc = document.getElementById('txDescription').value;
+
+    const newTx = {
+        id: 'tx-custom-' + Date.now(),
+        transaction_type: type,
+        category: category,
+        amount: amount,
+        payment_mode: mode,
+        description: desc,
+        date: date,
+        created_by: state.currentUser.role,
+        created_at: new Date().toISOString()
+    };
+
+    state.transactions.unshift(newTx);
+    saveState();
+    
+    document.getElementById('newTransactionForm').reset();
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('txDate').value = today;
+    setTxFormType('INCOME');
+
+    switchView('dashboard');
+    alert("লেনদেনটি সফলভাবে সংরক্ষণ করা হয়েছে।");
+}
+
+// Reports Loader
+function loadReports() {
+    const selectMonth = parseInt(document.getElementById('reportMonth').value);
+    const selectYear = parseInt(document.getElementById('reportYear').value);
+
+    let monthlyInc = 0;
+    let monthlyExp = 0;
+    const breakdown = {};
+
+    state.transactions.forEach(tx => {
+        const parts = tx.date.split('-');
+        const y = parseInt(parts[0]);
+        const m = parseInt(parts[1]);
+
+        if (m === selectMonth && y === selectYear) {
+            const val = parseFloat(tx.amount);
+            if (tx.transaction_type === 'INCOME') {
+                monthlyInc += val;
+            } else if (tx.transaction_type === 'EXPENSE') {
+                monthlyExp += val;
+            }
+
+            if (!breakdown[tx.category]) {
+                breakdown[tx.category] = { amount: 0, type: tx.transaction_type };
+            }
+            breakdown[tx.category].amount += val;
+        }
+    });
+
+    const net = monthlyInc - monthlyExp;
+
+    document.getElementById('reportTotalIncome').innerText = formatCurrency(monthlyInc);
+    document.getElementById('reportTotalExpense').innerText = formatCurrency(monthlyExp);
+    
+    const netEl = document.getElementById('reportNetBalance');
+    netEl.innerText = `${net >= 0 ? '+' : '-'}৳ ${formatCurrency(Math.abs(net))}`;
+    netEl.className = net >= 0 ? 'text-success' : 'text-danger';
+    if (net < 0) netEl.style.color = 'var(--danger-color)';
+
+    const incList = document.getElementById('categoryBreakdownIncomeList');
+    const expList = document.getElementById('categoryBreakdownExpenseList');
+    if (incList && expList) {
+        incList.innerHTML = '';
+        expList.innerHTML = '';
+
+        const sortedCats = Object.keys(breakdown).sort((a,b) => breakdown[b].amount - breakdown[a].amount);
+        
+        let hasIncome = false;
+        let hasExpense = false;
+
+        sortedCats.forEach(cat => {
+            const data = breakdown[cat];
+            const row = document.createElement('div');
+            row.className = 'summary-item';
+            row.style.marginBottom = '6px';
+            row.innerHTML = `
+                <span>${CATEGORIES_BN[cat] || cat}</span>
+                <span class="${data.type === 'INCOME' ? 'text-success' : 'text-danger'}" style="${data.type === 'EXPENSE' ? 'color:var(--danger-color);' : ''}">
+                    ${data.type === 'INCOME' ? '+' : '-'}৳ ${englishToBanglaNum(data.amount.toString())}
+                </span>
+            `;
+            
+            if (data.type === 'INCOME') {
+                incList.appendChild(row);
+                hasIncome = true;
+            } else {
+                expList.appendChild(row);
+                hasExpense = true;
+            }
+        });
+
+        if (!hasIncome) {
+            incList.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:10px;font-size:11px;">কোনো আয় নেই</div>';
+        }
+        if (!hasExpense) {
+            expList.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:10px;font-size:11px;">কোনো ব্যয় নেই</div>';
+        }
+    }
+}
+
+// ================== COMMITTEE & WAIVER ADDITIONS ==================
+
+// Render Managing Committee list in Admin Settings Editor
+function renderAdminCommitteeEditor() {
+    const listContainer = document.getElementById('adminCommitteeList');
+    if (!listContainer) return;
+    listContainer.innerHTML = '';
+
+    state.committee.forEach(m => {
+        const item = document.createElement('div');
+        item.style.display = 'flex';
+        item.style.justifyContent = 'space-between';
+        item.style.alignItems = 'center';
+        item.style.padding = '8px';
+        item.style.border = '1px solid var(--border-color)';
+        item.style.borderRadius = '8px';
+        item.style.background = 'var(--bg-color)';
+        item.style.fontSize = '12px';
+
+        const imgTag = m.photo ? `<img src="${m.photo}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; margin-right: 8px;">` : `<div style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary-light)44; color: var(--primary-color); display: flex; align-items: center; justify-content: center; font-size: 14px; margin-right: 8px;"><i class="fa-solid fa-user-tie"></i></div>`;
+
+        item.innerHTML = `
+            <div style="display: flex; align-items: center;">
+                ${imgTag}
+                <div>
+                    <strong>${m.name}</strong> <span style="font-size: 10px; color: var(--primary-color); font-weight: bold; background: var(--primary-light)33; padding: 1px 6px; border-radius: 12px; margin-left: 5px;">${m.designation}</span>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">
+                        <i class="fa-solid fa-phone" style="font-size: 9px;"></i> ${englishToBanglaNum(m.phone)}
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+                <button onclick="editCommitteeMember('${m.id}')" style="border: none; background: transparent; color: var(--primary-color); cursor: pointer; padding: 4px;" title="সম্পাদনা করুন">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                </button>
+                <button onclick="deleteCommitteeMember('${m.id}')" style="border: none; background: transparent; color: var(--danger-color); cursor: pointer; padding: 4px;" title="মুছে ফেলুন">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>
+        `;
+        listContainer.appendChild(item);
+    });
+}
+
+// Add/Edit Committee Member & Sync with Mosque Member List
+function handleAddCommitteeSubmit(e) {
+    try {
+        e.preventDefault();
+        
+        if (!state.currentUser || (state.currentUser.role !== 'admin' && state.currentUser.role !== 'secretary')) {
+            alert("শুধুমাত্র সাধারণ সম্পাদক ও এডমিন পরিচালনা কমিটির তথ্য আপডেট করতে পারবেন!");
+            return;
+        }
+
+        // Safety nets: ensure arrays exist
+        if (!Array.isArray(state.committee)) state.committee = [];
+        if (!Array.isArray(state.members)) state.members = [];
+        if (!Array.isArray(state.subscriptions)) state.subscriptions = [];
+
+        const editId = document.getElementById('editCommId').value;
+        const name = document.getElementById('commName').value.trim();
+        const designation = document.getElementById('commDesignation').value.trim();
+        const phone = document.getElementById('commPhone').value.trim();
+
+        if (editId) {
+            // Editing Mode
+            const commMember = state.committee.find(m => m && m.id && m.id.toString() === editId.toString());
+            if (commMember) {
+                // Find linked general member by linked member_id or phone matching (safely toString)
+                let genMember = state.members.find(m => 
+                    m && ((commMember.member_id && m.id && m.id.toString() === commMember.member_id.toString()) || 
+                    (m.phone && m.phone === commMember.phone))
+                );
+                
+                commMember.name = name;
+                commMember.designation = designation;
+                commMember.phone = phone;
+                commMember.photo = uploadedCommPhotoBase64;
+                
+                if (genMember) {
+                    genMember.name = name;
+                    genMember.phone = phone;
+                }
+                alert("পরিচালনা কমিটির সদস্যের তথ্য সফলভাবে হালনাগাদ করা হয়েছে।");
+            }
+        } else {
+            // Adding Mode
+            const phoneExists = state.members.some(m => m && m.phone && m.phone === phone);
+            let linkedMemberId = '';
+
+            if (!phoneExists) {
+                // Auto add to general members list with guaranteed unique ID
+                linkedMemberId = 'member-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+                const newGenMember = {
+                    id: linkedMemberId,
+                    name: name,
+                    phone: phone,
+                    address: 'পরিচালনা কমিটি',
+                    member_type: 'General',
+                    monthly_fee: 150,
+                    status: 'Active',
+                    join_date: new Date().toISOString().split('T')[0],
+                    opening_arrears: 0
+                };
+                state.members.push(newGenMember);
+
+                // Push initial subscription for the current month
+                const now = new Date();
+                const currentMonth = now.getMonth() + 1;
+                const currentYear = now.getFullYear();
+                state.subscriptions.push({
+                    id: `sub-${linkedMemberId}-${currentYear}-${currentMonth}`,
+                    member_id: linkedMemberId,
+                    year: currentYear,
+                    month: currentMonth,
+                    amount_paid: 0,
+                    due_amount: 150,
+                    status: 'Unpaid',
+                    last_payment_date: ''
+                });
+            } else {
+                // If already exists in general members, link them and update name
+                const existingGen = state.members.find(m => m && m.phone && m.phone === phone);
+                linkedMemberId = existingGen.id;
+                existingGen.name = name;
+            }
+
+            const newCommMember = {
+                id: Date.now().toString(),
+                name: name,
+                designation: designation,
+                phone: phone,
+                photo: uploadedCommPhotoBase64,
+                member_id: linkedMemberId
+            };
+            state.committee.push(newCommMember);
+            alert("পরিচালনা কমিটির সদস্য সফলভাবে যোগ করা হয়েছে এবং সাধারণ সদস্য তালিকায় সিঙ্ক করা হয়েছে।");
+        }
+
+        saveState();
+        cancelCommitteeEdit();
+        renderAdminCommitteeEditor();
+        renderCommitteeDashboard();
+        refreshAppUI(); // Re-render general members list and statistics immediately!
+    } catch (err) {
+        console.error("Error adding committee member: ", err);
+        alert("কমিটির তথ্য সেভ করার সময় একটি ত্রুটি হয়েছে। ದয়া করে আবার চেষ্টা করুন।\nError Details: " + err.message);
+    }
+}
+
+// Edit Committee Member Form Loader
+function editCommitteeMember(id) {
+    const m = state.committee.find(member => member.id.toString() === id.toString());
+    if (!m) return;
+
+    document.getElementById('editCommId').value = m.id;
+    document.getElementById('commName').value = m.name;
+    document.getElementById('commDesignation').value = m.designation;
+    document.getElementById('commPhone').value = m.phone;
+
+    // Show preview of existing photo if any
+    const previewImg = document.getElementById('commPreviewImg');
+    const previewContainer = document.getElementById('commPhotoPreview');
+    if (m.photo) {
+        previewImg.src = m.photo;
+        previewContainer.style.display = 'block';
+        uploadedCommPhotoBase64 = m.photo;
+    } else {
+        previewImg.src = '';
+        previewContainer.style.display = 'none';
+        uploadedCommPhotoBase64 = '';
+    }
+
+    // Change submit button text and show cancel button
+    document.getElementById('commSubmitBtn').innerText = 'হালনাগাদ করুন';
+    document.getElementById('commCancelBtn').style.display = 'block';
+}
+
+// Cancel Committee Edit mode
+function cancelCommitteeEdit() {
+    document.getElementById('editCommId').value = '';
+    document.getElementById('addCommitteeForm').reset();
+    uploadedCommPhotoBase64 = '';
+    document.getElementById('commPhotoPreview').style.display = 'none';
+
+    document.getElementById('commSubmitBtn').innerText = 'কমিটিতে যোগ করুন';
+    document.getElementById('commCancelBtn').style.display = 'none';
+}
+
+// Delete Committee Member (Admin & Secretary Only)
+function deleteCommitteeMember(id) {
+    const role = state.currentUser.role;
+    if (role !== 'admin' && role !== 'secretary') {
+        alert("শুধুমাত্র সাধারণ সম্পাদক ও এডমিন পরিচালনা কমিটি থেকে বাদ দিতে পারবেন!");
+        return;
+    }
+    if (!confirm("আপনি কি নিশ্চিতভাবে এই সদস্যকে পরিচালনা কমিটি থেকে বাদ দিতে চান?")) return;
+    
+    state.committee = state.committee.filter(m => m.id.toString() !== id.toString());
+    saveState();
+    
+    renderAdminCommitteeEditor();
+    renderCommitteeDashboard();
+}
+
+// Global slider interval variable
+let committeeSliderInterval = null;
+
+// Render Managing Committee Carousel on Dashboard
+function renderCommitteeDashboard() {
+    const container = document.getElementById('committeeContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!state.committee || state.committee.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); width: 100%; padding: 15px; font-size: 12px;">পরিচালনা কমিটির কোনো তথ্য নেই। এডমিন প্যানেল থেকে যোগ করুন।</div>';
+        return;
+    }
+
+    state.committee.forEach((m, idx) => {
+        const item = document.createElement('div');
+        item.style.flex = '0 0 135px';
+        item.style.background = 'white';
+        item.style.border = '1px solid var(--border-color)';
+        item.style.borderRadius = '14px';
+        item.style.padding = '12px 10px';
+        item.style.textAlign = 'center';
+        item.style.display = 'flex';
+        item.style.flexDirection = 'column';
+        item.style.alignItems = 'center';
+        item.style.boxShadow = 'var(--shadow-sm)';
+        item.style.transition = 'transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 0.4s ease, box-shadow 0.4s ease';
+        
+        const avatar = m.photo ? `<img src="${m.photo}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary-light); margin-bottom: 6px;">` : `<div style="width: 50px; height: 50px; border-radius: 50%; background: var(--primary-light)44; color: var(--primary-color); display: flex; align-items: center; justify-content: center; font-size: 20px; border: 2px solid var(--primary-light); margin-bottom: 6px;"><i class="fa-solid fa-user-tie"></i></div>`;
+
+        item.innerHTML = `
+            ${avatar}
+            <div style="font-size: 11px; font-weight: bold; color: var(--text-main); margin-bottom: 4px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${m.name}">${m.name}</div>
+            <div style="font-size: 9px; font-weight: 700; color: #ffffff; background: var(--primary-color); padding: 2px 8px; border-radius: 20px; margin-bottom: 8px; display: inline-block;">${m.designation}</div>
+            <a href="tel:${m.phone}" style="width: 26px; height: 26px; border-radius: 50%; background: var(--primary-light); color: var(--primary-color); display: flex; align-items: center; justify-content: center; font-size: 11px; text-decoration: none; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1.0)'" title="কল করুন">
+                <i class="fa-solid fa-phone"></i>
+            </a>
+        `;
+        container.appendChild(item);
+    });
+
+    let currentIndex = 0;
+    
+    // Professional center-alignment and styling highlight helper
+    const highlightCard = (index) => {
+        const cards = container.children;
+        if (cards.length === 0 || index >= cards.length) return;
+        
+        const targetCard = cards[index];
+        
+        // Reset all cards to normal state
+        Array.from(cards).forEach(c => {
+            c.style.transform = 'scale(1.0)';
+            c.style.borderColor = 'var(--border-color)';
+            c.style.boxShadow = 'var(--shadow-sm)';
+        });
+        
+        // Highlight active sliding card
+        targetCard.style.transform = 'scale(1.05)';
+        targetCard.style.borderColor = 'var(--primary-color)';
+        targetCard.style.boxShadow = 'var(--shadow-md)';
+
+        // Math formula for absolute center alignment inside scroll viewport
+        const containerCenter = container.clientWidth / 2;
+        const cardCenter = targetCard.clientWidth / 2;
+        const scrollPosition = targetCard.offsetLeft - container.offsetLeft - containerCenter + cardCenter;
+        
+        container.scrollTo({
+            left: scrollPosition,
+            behavior: 'smooth'
+        });
+    };
+
+    // Auto sliding interval setup
+    if (committeeSliderInterval) clearInterval(committeeSliderInterval);
+    
+    const slideDelay = 3500; // 3.5 seconds
+
+    // Initial highlight delay to allow DOM render calculations
+    setTimeout(() => {
+        highlightCard(0);
+    }, 200);
+
+    committeeSliderInterval = setInterval(() => {
+        const cards = container.children;
+        if (cards.length <= 1) return;
+
+        currentIndex++;
+        if (currentIndex >= cards.length) {
+            currentIndex = 0; // Loop back from end to start (শেষ থেকে শুরুতে)
+        }
+
+        highlightCard(currentIndex);
+    }, slideDelay);
+}
+
+// Handle Waiver Form Submission (President Only)
+function handleWaiverSubmit(e) {
+    e.preventDefault();
+    if (state.currentUser.role !== 'president') return;
+    
+    const memberId = document.getElementById('wpMemberId').value;
+    const waiverAmount = parseFloat(document.getElementById('wpAmount').value);
+    const reason = document.getElementById('wpReason').value.trim();
+    const date = new Date().toISOString().split('T')[0];
+    
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+    
+    if (isNaN(waiverAmount) || waiverAmount <= 0) {
+        alert("সদস্যের চাঁদা মওকুফের সঠিক পরিমাণ দিন!");
+        return;
+    }
+    
+    let remainingWaiver = waiverAmount;
+    const currentYear = 2026;
+    const now = new Date();
+    const currentMonthLimit = now.getMonth() + 1;
+    
+    const joinParts = member.join_date.split('-');
+    const joinYear = parseInt(joinParts[0]);
+    const joinMonth = parseInt(joinParts[1]);
+    
+    // Allocate waiver amount as subscription fee reductions chronologically
+    for (let year = joinYear; year <= currentYear && remainingWaiver > 0; year++) {
+        const startM = year === joinYear ? joinMonth : 1;
+        const endM = year === currentYear ? currentMonthLimit : 12;
+        
+        for (let m = startM; m <= endM && remainingWaiver > 0; m++) {
+            let sub = state.subscriptions.find(s => s.member_id === memberId && s.year === year && s.month === m);
+            if (!sub) {
+                sub = {
+                    id: `sub-${memberId}-${year}-${m}`,
+                    member_id: memberId,
+                    year: year,
+                    month: m,
+                    amount_paid: 0,
+                    due_amount: member.monthly_fee,
+                    status: 'Unpaid',
+                    last_payment_date: ''
+                };
+                state.subscriptions.push(sub);
+            }
+            
+            const currentDue = member.monthly_fee - parseFloat(sub.amount_paid);
+            if (currentDue > 0) {
+                const waiveForThisMonth = Math.min(remainingWaiver, currentDue);
+                
+                sub.amount_paid = parseFloat(sub.amount_paid) + waiveForThisMonth;
+                sub.due_amount = member.monthly_fee - sub.amount_paid;
+                sub.status = sub.due_amount <= 0 ? 'Paid' : 'Partial';
+                sub.last_payment_date = date;
+                sub.receipt_no = 'মওকুফ'; // Tagged as waived
+                
+                remainingWaiver -= waiveForThisMonth;
+            }
+        }
+    }
+    
+    // If there is excess waiver, add as advance balance
+    if (remainingWaiver > 0) {
+        member.advance_balance = parseFloat(member.advance_balance || 0) + remainingWaiver;
+        processAdvanceDeductions();
+    }
+    
+    saveState();
+    closeModal('member-details-modal');
+    refreshAppUI();
+    
+    alert(`৳ ${englishToBanglaNum(waiverAmount.toString())} চাঁদা মওকুফ সফলভাবে সম্পন্ন হয়েছে। মওকুফের কারণ: ${reason}`);
+}
+
+// Cleanup soft-deleted members after 60 days
+function cleanupPermanentlyDeletedMembers() {
+    const now = new Date();
+    const limitMs = 60 * 24 * 60 * 60 * 1000; // 60 days
+    let stateChanged = false;
+
+    if (!state.members) return;
+
+    state.members = state.members.filter(member => {
+        if (member.status === 'Deleted' && member.deleted_at) {
+            const deletedDate = new Date(member.deleted_at);
+            const diffMs = now - deletedDate;
+            if (diffMs > limitMs) {
+                // Permanently remove subscriptions
+                state.subscriptions = state.subscriptions.filter(s => s.member_id !== member.id);
+                stateChanged = true;
+                return false;
+            }
+        }
+        return true;
+    });
+
+    if (stateChanged) {
+        saveState();
+    }
+}
+
+// Toggle Member Suspension (General Secretary or Admin Only)
+function toggleMemberSuspension(memberId) {
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+
+    const role = state.currentUser.role;
+    if (role !== 'secretary' && role !== 'admin') {
+        alert("শুধুমাত্র সাধারণ সম্পাদক এবং এডমিন সদস্যপদ স্থগিত করতে পারবেন!");
+        return;
+    }
+
+    if (member.status === 'Suspended') {
+        member.status = 'Active';
+        alert(`সদস্য ${member.name}-এর সদস্যপদ সফলভাবে সক্রিয় করা হয়েছে।`);
+    } else {
+        member.status = 'Suspended';
+        alert(`সদস্য ${member.name}-এর সদস্যপদ সাময়িকভাবে স্থগিত করা হয়েছে।`);
+    }
+
+    saveState();
+    closeModal('member-details-modal');
+    refreshAppUI();
+}
+
+// Request Member Deletion (Non-Admin roles request deletion)
+function requestMemberDeletion(memberId) {
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+
+    if (member.delete_requested) {
+        alert("এই সদস্যকে ডিলিট করার আবেদন অলরেডি পেন্ডিং রয়েছে!");
+        return;
+    }
+
+    member.delete_requested = true;
+    saveState();
+    closeModal('member-details-modal');
+    refreshAppUI();
+    
+    alert(`সদস্য ${member.name}-কে ডিলিট করার আবেদন এডমিন প্যানেলে পাঠানো হয়েছে। এডমিন অনুমোদন করলে এটি রিসাইকেল বিনে চলে যাবে।`);
+}
+
+// Approve Member Deletion (Admin Only - Soft Delete for 60 Days)
+function approveDeletionRequest(memberId) {
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+
+    if (state.currentUser.role !== 'admin') {
+        alert("শুধুমাত্র এডমিন ডিলিট আবেদন অনুমোদন করতে পারবেন!");
+        return;
+    }
+
+    member.status = 'Deleted';
+    member.delete_requested = false;
+    member.deleted_at = new Date().toISOString(); // Soft delete timestamp
+    
+    saveState();
+    closeModal('member-details-modal');
+    refreshAppUI();
+    
+    alert(`সদস্য ${member.name}-এর ডিলিট আবেদন অনুমোদিত হয়েছে। সদস্যপদ বাতিল করে ৬০ দিনের জন্য রিসাইকেল বিনে পাঠানো হয়েছে।`);
+}
+
+// Reject Member Deletion Request (Admin Only)
+function rejectDeletionRequest(memberId) {
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+
+    if (state.currentUser.role !== 'admin') {
+        alert("শুধুমাত্র এডমিন ডিলিট আবেদন বাতিল করতে পারবেন!");
+        return;
+    }
+
+    member.delete_requested = false;
+    saveState();
+    closeModal('member-details-modal');
+    refreshAppUI();
+    
+    alert(`সদস্য ${member.name}-এর ডিলিট আবেদন বাতিল করা হয়েছে।`);
+}
+
+// Render Global DB Recycle Bin (30-day snapshots)
+function renderGlobalRecycleBin() {
+    const container = document.getElementById('globalRecycleBinList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!state.global_recycle_bin || state.global_recycle_bin.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 15px; font-size: 12px;">কোনো মুছে ফেলা ডাটাবেস নেই।</div>';
+        return;
+    }
+
+    const now = new Date();
+
+    // Sort descending by deletedAt
+    const sortedBin = [...state.global_recycle_bin].sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt));
+
+    sortedBin.forEach((snapshot, sortedIndex) => {
+        // Find original index
+        const originalIndex = state.global_recycle_bin.indexOf(snapshot);
+        
+        const deletedDate = new Date(snapshot.deletedAt);
+        const diffMs = now - deletedDate;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const remainingDays = Math.max(0, 30 - diffDays);
+
+        const card = document.createElement('div');
+        card.style.display = 'flex';
+        card.style.justifyContent = 'space-between';
+        card.style.alignItems = 'center';
+        card.style.padding = '10px';
+        card.style.border = '1px solid #ffeeba';
+        card.style.borderRadius = '8px';
+        card.style.background = '#fff8e5';
+        card.style.fontSize = '12px';
+
+        card.innerHTML = `
+            <div>
+                <strong>${formatDate(snapshot.deletedAt.split('T')[0])}</strong> - ${new Date(snapshot.deletedAt).toLocaleTimeString('bn-BD')}
+                <div style="font-size: 10px; color: #856404; margin-top: 2px;">
+                    <i class="fa-solid fa-clock"></i> আর ${englishToBanglaNum(remainingDays.toString())} দিন পর মুছে যাবে
+                </div>
+                <div style="font-size: 10px; color: #333; margin-top: 2px;">
+                    সদস্য: ${englishToBanglaNum(snapshot.members?.length.toString() || '0')}, লেনদেন: ${englishToBanglaNum(snapshot.transactions?.length.toString() || '0')}
+                </div>
+            </div>
+            <button class="btn btn-primary" style="height: 28px; padding: 0 10px; font-size: 11px;" onclick="restoreGlobalRecycleBin(${originalIndex})">
+                <i class="fa-solid fa-rotate-left"></i> রিস্টোর
+            </button>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// Restore entire database from global recycle bin snapshot
+window.restoreGlobalRecycleBin = function(index) {
+    if (confirm("আপনি কি নিশ্চিতভাবে এই ডাটাবেসটি রিস্টোর করতে চান? আপনার বর্তমান ডাটা এর ফলে ওভাররাইট হয়ে যাবে।")) {
+        const snapshot = state.global_recycle_bin[index];
+        if (!snapshot) return;
+
+        // Restore active arrays
+        state.members = JSON.parse(JSON.stringify(snapshot.members || []));
+        state.transactions = JSON.parse(JSON.stringify(snapshot.transactions || []));
+        state.subscriptions = JSON.parse(JSON.stringify(snapshot.subscriptions || []));
+        if (snapshot.committee) {
+            state.committee = JSON.parse(JSON.stringify(snapshot.committee));
+        }
+
+        // Remove from recycle bin
+        state.global_recycle_bin.splice(index, 1);
+        
+        saveState();
+        refreshAppUI();
+        alert("সফলভাবে ডাটাবেসটি রিস্টোর করা হয়েছে!");
+    }
+};
+
+// Render Soft-deleted members in Admin settings panel
+function renderRecycleBin() {
+    const container = document.getElementById('recycleBinList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const deletedMembers = state.members.filter(m => m.status === 'Deleted');
+
+    if (deletedMembers.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 15px; font-size: 12px;">রিসাইকেল বিন ফাঁকা রয়েছে।</div>';
+        return;
+    }
+
+    const now = new Date();
+
+    deletedMembers.forEach(m => {
+        const deletedDate = new Date(m.deleted_at);
+        const diffMs = now - deletedDate;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const remainingDays = Math.max(0, 60 - diffDays);
+
+        const card = document.createElement('div');
+        card.style.display = 'flex';
+        card.style.justifyContent = 'space-between';
+        card.style.alignItems = 'center';
+        card.style.padding = '10px';
+        card.style.border = '1px solid #f5c6cb';
+        card.style.borderRadius = '8px';
+        card.style.background = '#fff3f3';
+        card.style.fontSize = '12px';
+
+        card.innerHTML = `
+            <div>
+                <strong>${m.name}</strong>
+                <div style="font-size: 10px; color: #721c24; margin-top: 2px;">
+                    <i class="fa-solid fa-clock"></i> ${englishToBanglaNum(remainingDays.toString())} দিন পর স্থায়ীভাবে ডিলিট হবে
+                </div>
+            </div>
+            <button onclick="restoreDeletedMember('${m.id}')" class="btn btn-primary btn-small" style="background-color: #28a745; border-color: #28a745; padding: 4px 10px; font-size: 10px; height: auto;">
+                <i class="fa-solid fa-trash-arrow-up"></i> পুনরুদ্ধার
+            </button>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// Restore Soft-Deleted Member (Admin Only)
+function restoreDeletedMember(memberId) {
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+
+    if (state.currentUser.role !== 'admin') {
+        alert("শুধুমাত্র এডমিন সদস্য পুনরুদ্ধার করতে পারবেন!");
+        return;
+    }
+
+    member.status = 'Active';
+    delete member.deleted_at;
+    
+    saveState();
+    renderRecycleBin();
+    refreshAppUI();
+    
+    alert(`সদস্য ${member.name}-কে রিসাইকেল বিন থেকে সফলভাবে পুনরুদ্ধার করা হয়েছে।`);
+}
+
+// Bulk Import Members from Excel / CSV (SheetJS)
+function handleBulkImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        try {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            // Read first worksheet
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            
+            // Convert to JSON array of arrays
+            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            if (rows.length <= 1) {
+                alert("এক্সেল ফাইলে কোনো ডাটা পাওয়া যায়নি!");
+                return;
+            }
+
+            // Find header indexes case-insensitively
+            const headerRow = rows[0].map(h => (h ? h.toString().trim().toLowerCase() : ''));
+            const nameIdx = headerRow.findIndex(h => h === 'name' || h === 'নাম');
+            const mobileIdx = headerRow.findIndex(h => h === 'mobile' || h === 'মোবাইল' || h === 'ফোন' || h === 'phone');
+            const arrearsIdx = headerRow.findIndex(h => h === 'arrears' || h === 'বকেয়া' || h === 'বকেয়া টাকা');
+
+            if (nameIdx === -1 || mobileIdx === -1 || arrearsIdx === -1) {
+                alert("এক্সেল ফাইলের হেডার সারিতে অবশ্যই 'Name', 'Mobile', এবং 'Arrears' কলামগুলো থাকতে হবে!");
+                return;
+            }
+
+            let importCount = 0;
+            let skipCount = 0;
+            const currentYear = 2026;
+            const defaultMonthlyFee = 150; // Standard general member monthly fee
+
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (!row || row.length === 0) continue;
+
+                const rawName = row[nameIdx];
+                const rawMobile = row[mobileIdx];
+                const rawArrears = row[arrearsIdx];
+
+                if (!rawName) {
+                    skipCount++;
+                    continue;
+                }
+
+                const name = rawName.toString().trim();
+                let mobile = '';
+                
+                if (rawMobile) {
+                    const cleanMobile = rawMobile.toString().replace(/[^0-9]/g, '').trim();
+                    if (cleanMobile.length > 0) {
+                        mobile = cleanMobile;
+                        if (mobile.length < 11) {
+                            skipCount++;
+                            continue;
+                        }
+                        if (mobile.length > 11) {
+                            mobile = mobile.substr(mobile.length - 11);
+                        }
+
+                        // Check for duplicate mobile only if mobile is provided
+                        const exists = state.members.some(m => m.phone === mobile);
+                        if (exists) {
+                            skipCount++;
+                            continue;
+                        }
+                    }
+                }
+
+                const arrears = parseFloat(rawArrears) || 0;
+                const memberId = 'member-bulk-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+
+                const now = new Date();
+                let currentMonth = now.getMonth() + 1;
+                let currentYear = now.getFullYear();
+
+                let remainingArrears = arrears;
+                let joinYear = currentYear;
+                let joinMonth = currentMonth;
+
+                // Collect subscriptions backward to match the exact arrears
+                const subsToPush = [];
+                let tempYear = currentYear;
+                let tempMonth = currentMonth;
+                let firstLoop = true;
+
+                while (remainingArrears > 0 || firstLoop) {
+                    firstLoop = false;
+                    
+                    const thisMonthDue = Math.min(remainingArrears, defaultMonthlyFee);
+                    const amountPaid = defaultMonthlyFee - thisMonthDue;
+                    
+                    subsToPush.push({
+                        id: `sub-${memberId}-${tempYear}-${tempMonth}`,
+                        member_id: memberId,
+                        year: tempYear,
+                        month: tempMonth,
+                        amount_paid: amountPaid,
+                        due_amount: thisMonthDue,
+                        status: amountPaid <= 0 ? 'Unpaid' : (thisMonthDue <= 0 ? 'Paid' : 'Partial'),
+                        last_payment_date: ''
+                    });
+                    
+                    joinYear = tempYear;
+                    joinMonth = tempMonth;
+                    
+                    remainingArrears -= thisMonthDue;
+                    
+                    // Move backward one month
+                    tempMonth--;
+                    if (tempMonth < 1) {
+                        tempMonth = 12;
+                        tempYear--;
+                    }
+                }
+
+                // Format join date as YYYY-MM-DD
+                const joinMonthStr = joinMonth < 10 ? '0' + joinMonth : joinMonth.toString();
+                const joinDate = `${joinYear}-${joinMonthStr}-01`;
+
+                const newMember = {
+                    id: memberId,
+                    name: name,
+                    phone: mobile,
+                    address: 'বাল্ক আপলোড',
+                    monthly_fee: defaultMonthlyFee,
+                    join_date: joinDate,
+                    status: 'Active',
+                    delete_requested: false
+                };
+
+                state.members.push(newMember);
+
+                // Add the generated subscriptions
+                subsToPush.forEach(sub => {
+                    state.subscriptions.push(sub);
+                });
+
+                importCount++;
+            }
+
+            saveState();
+            refreshAppUI();
+            
+            // Reset file input
+            document.getElementById('bulkMemberFileInput').value = '';
+
+            let resultMsg = `${englishToBanglaNum(importCount.toString())} জন সদস্য সফলভাবে এক্সেল থেকে ইম্পোর্ট করা হয়েছে।`;
+            if (skipCount > 0) {
+                resultMsg += ` (মোবাইল নম্বর ডুপ্লিকেট বা ডাটা অসম্পূর্ণ থাকায় ${englishToBanglaNum(skipCount.toString())} টি এন্ট্রি বাদ দেওয়া হয়েছে)`;
+            }
+            alert(resultMsg);
+
+        } catch (err) {
+            console.error(err);
+            alert("এক্সেল ফাইল রিড করার সময় সমস্যা হয়েছে! দয়া করে সঠিক ফাইল নির্বাচন করুন।");
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+// ================== FORGOT PASSWORD PASSWORD RECOVERY LOGIC ==================
+
+// Forgot Password recovery session state
+let fpSession = {
+    role: '',
+    phone: '',
+    otp: '',
+    attempts: 0
+};
+
+// Open Forgot Password Modal
+function openForgotPasswordModal(e) {
+    if (e) e.preventDefault();
+    
+    // Reset session
+    fpSession = {
+        role: '',
+        phone: '',
+        otp: '',
+        attempts: 0
+    };
+    
+    // Reset forms
+    document.getElementById('fpVerifyForm').reset();
+    document.getElementById('fpOtpForm').reset();
+    document.getElementById('fpResetForm').reset();
+    
+    // Show step 1, hide steps 2 and 3
+    document.getElementById('fpVerifyForm').style.display = 'block';
+    document.getElementById('fpOtpForm').style.display = 'none';
+    document.getElementById('fpResetForm').style.display = 'none';
+    
+    openModal('forgot-password-modal');
+}
+
+// Step 1: Submit verification role + phone
+function handleFPVerifySubmit(e) {
+    e.preventDefault();
+    
+    const role = document.getElementById('fpRole').value;
+    const phone = document.getElementById('fpPhone').value.trim();
+    
+    const user = state.users[role];
+    if (!user || !user.phone || user.phone !== phone) {
+        alert("এই পদবীর জন্য প্রদানকৃত মোবাইল নম্বরটি সঠিক নয়!");
+        return;
+    }
+    
+    // Generate a random 4-digit OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    fpSession.role = role;
+    fpSession.phone = phone;
+    fpSession.otp = otp;
+    fpSession.attempts = 3;
+    
+    // Transition to step 2 (OTP Entry)
+    document.getElementById('fpVerifyForm').style.display = 'none';
+    document.getElementById('fpOtpForm').style.display = 'block';
+    
+    // Show the simulated SMS notification on screen
+    const rawMsg = `বাইতুল মামুর জামে মসজিদ: আপনার পাসওয়ার্ড পুনরুদ্ধারের ওটিপি কোডটি হলো: ${otp}। এটি গোপন রাখুন।`;
+    showSimulatedSMSToast(rawMsg);
+}
+
+// Step 2: Submit OTP validation
+function handleFPOtpSubmit(e) {
+    e.preventDefault();
+    
+    const code = document.getElementById('fpOtpCode').value.trim();
+    if (code === fpSession.otp) {
+        // Transition to step 3 (Reset password)
+        document.getElementById('fpOtpForm').style.display = 'none';
+        document.getElementById('fpResetForm').style.display = 'block';
+    } else {
+        fpSession.attempts--;
+        if (fpSession.attempts <= 0) {
+            alert("অতিরিক্ত ভুল ওটিপি প্রদানের কারণে পাসওয়ার্ড পুনরুদ্ধার প্রক্রিয়াটি বাতিল করা হলো।");
+            closeModal('forgot-password-modal');
+        } else {
+            alert(`ভুল ওটিপি কোড! অনুগ্রহ করে পুনরায় চেষ্টা করুন। (অবশিষ্ট সুযোগ: ${englishToBanglaNum(fpSession.attempts.toString())} বার)`);
+        }
+    }
+}
+
+// Step 3: Submit Reset Password
+function handleFPResetSubmit(e) {
+    e.preventDefault();
+    
+    const newPass = document.getElementById('fpNewPassword').value.trim();
+    const confirmPass = document.getElementById('fpConfirmPassword').value.trim();
+    
+    if (newPass.length < 4) {
+        alert("পাসওয়ার্ড ন্যূনতম ৪ ডিজিটের হতে হবে!");
+        return;
+    }
+    
+    if (newPass !== confirmPass) {
+        alert("উভয় পাসওয়ার্ড হুবহু একই হতে হবে!");
+        return;
+    }
+    
+    // Save new password
+    if (state.users[fpSession.role]) {
+        state.users[fpSession.role].password = newPass;
+        saveState();
+        alert(`${state.users[fpSession.role].name}-এর পাসওয়ার্ড সফলভাবে রিসেট করা হয়েছে। নতুন পাসওয়ার্ড দিয়ে লগইন করুন।`);
+        closeModal('forgot-password-modal');
+    } else {
+        alert("পাসওয়ার্ড রিসেট করতে সমস্যা হয়েছে!");
+        closeModal('forgot-password-modal');
+    }
+}
+
+// Show a beautiful premium top SMS Toast Alert on Screen
+function showSimulatedSMSToast(msg) {
+    const existing = document.getElementById('sms-toast-notification');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.id = 'sms-toast-notification';
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1e293b;
+        color: #f8fafc;
+        border-left: 5px solid #22c55e;
+        padding: 15px 20px;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        z-index: 999999;
+        font-family: 'Hind Siliguri', sans-serif;
+        font-size: 13px;
+        max-width: 90%;
+        width: 380px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        animation: slideDown 0.3s ease;
+    `;
+    toast.innerHTML = `
+        <div style="font-size: 24px;">✉️</div>
+        <div>
+            <div style="font-weight: bold; color: #22c55e; margin-bottom: 2px;">মোবাইল মেসেজ (SMS)</div>
+            <div>${msg}</div>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    const style = document.createElement('style');
+    style.innerHTML = `
+        @keyframes slideDown {
+            from { top: -80px; opacity: 0; }
+            to { top: 20px; opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Auto-remove toast after 12 seconds
+    setTimeout(() => {
+        if (toast) toast.remove();
+    }, 12000);
+}
+
+// Handle Arrears Adjustment Submission (Secretary and Admin Only)
+function handleArrearsAdjustmentSubmit(e) {
+    try {
+        e.preventDefault();
+        
+        if (!state.currentUser || (state.currentUser.role !== 'admin' && state.currentUser.role !== 'secretary')) {
+            alert("শুধুমাত্র সাধারণ সম্পাদক ও এডমিন বকেয়া টাকা সমন্বয় করতে পারবেন!");
+            return;
+        }
+
+        if (!Array.isArray(state.members)) state.members = [];
+
+        const memberId = document.getElementById('adjMemberId').value;
+        const type = document.getElementById('adjType').value;
+        const amount = parseFloat(document.getElementById('adjAmount').value);
+        const reason = document.getElementById('adjReason').value.trim();
+
+        if (amount <= 0 || isNaN(amount)) {
+            alert("টাকার পরিমাণ অবশ্যই ০-এর চেয়ে বেশি হতে হবে!");
+            return;
+        }
+
+        // Fix integer vs string silent bug by converting both to string
+        const member = state.members.find(m => m && m.id && m.id.toString() === memberId.toString());
+        if (!member) {
+            alert("সদস্য খুঁজে পাওয়া যায়নি!");
+            return;
+        }
+
+        // Convert existing opening arrears to float to prevent string concatenation
+        let currentOpening = parseFloat(member.opening_arrears || 0);
+        let typeStr = "";
+
+        if (type === 'decrease') {
+            member.opening_arrears = currentOpening - amount;
+            typeStr = 'বকেয়া হ্রাস';
+        } else if (type === 'increase') {
+            member.opening_arrears = currentOpening + amount;
+            typeStr = 'বকেয়া বৃদ্ধি';
+        } else if (type === 'advance_increase') {
+            let currentAdvance = parseFloat(member.advance_balance || 0);
+            member.advance_balance = currentAdvance + amount;
+            processAdvanceDeductions(); // Allocate advance balance immediately
+            typeStr = 'অগ্রিম জমা বৃদ্ধি';
+        } else if (type === 'advance_decrease') {
+            let currentAdvance = parseFloat(member.advance_balance || 0);
+            if (amount > currentAdvance) {
+                alert(`অগ্রিম জমার চেয়ে কমানোর পরিমাণ বেশি হতে পারে না! (বর্তমান জমা: ৳ ${currentAdvance})`);
+                return;
+            }
+            member.advance_balance = currentAdvance - amount;
+            typeStr = 'অগ্রিম জমা হ্রাস';
+        }
+
+        saveState();
+        closeModal('member-details-modal');
+        refreshAppUI();
+
+        alert(`${member.name}-এর ${typeStr} সফলভাবে সম্পন্ন হয়েছে। (কারণ: ${reason})`);
+    } catch (err) {
+        console.error("Error adjusting arrears: ", err);
+        alert("বকেয়া সমন্বয় করার সময় একটি ত্রুটি হয়েছে।\nError Details: " + err.message);
+    }
+}
+
+// ==========================================
+// Khata Make (Ledger Printing) Functions
+// ==========================================
+function generateAllMembersKhata() {
+    const yearSelect = document.getElementById('khataMakeYear');
+    const year = yearSelect ? yearSelect.value : new Date().getFullYear();
+    
+    // Filter active members only
+    const activeMembers = state.members.filter(m => m.status === 'active');
+    
+    if (activeMembers.length === 0) {
+        alert("কোনো সক্রিয় সদস্য পাওয়া যায়নি।");
+        return;
+    }
+    
+    // Sort members numerically by ID if possible, else alphabetically
+    activeMembers.sort((a, b) => {
+        const numA = parseInt(a.id.replace('member-', '')) || 0;
+        const numB = parseInt(b.id.replace('member-', '')) || 0;
+        return numA - numB;
+    });
+
+    const khataContainer = document.getElementById('printableKhataArea');
+    if (!khataContainer) return;
+    
+    let htmlContent = '';
+    
+    const months = ['জানুয়ারি', 'ফেব্রুয়ারী', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
+    
+    activeMembers.forEach(member => {
+        const memberNum = englishToBanglaNum(member.id.replace('member-', ''));
+        
+        let tableRows = '';
+        months.forEach(month => {
+            tableRows += `
+                <tr>
+                    <td style="text-align: left; font-weight: bold;">${month}</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            `;
+        });
+        
+        // Total row
+        tableRows += `
+            <tr style="font-weight: bold;">
+                <td style="text-align: left;">সর্ব মোট</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+        `;
+        
+        const memberHtml = `
+            <div class="khata-page">
+                <div class="khata-header">
+                    <!-- Mosque logo (if available in settings, or default icon) -->
+                    <img src="${state.settings.logoData || 'icons/mosque_icon_192.png'}" alt="Logo">
+                    <div class="khata-title">
+                        <h2>${state.settings.mosqueName}</h2>
+                        <p>${state.settings.address}</p>
+                        <h3>মাসিক চাঁদা আদায় বহি</h3>
+                        <p style="font-size: 14px; font-weight: bold; margin-top: 5px;">বছর: ${englishToBanglaNum(year.toString())} খ্রি:</p>
+                    </div>
+                </div>
+                
+                <div class="khata-top-info">
+                    <div>নাম: <span style="font-weight: normal; margin-left: 10px; border-bottom: 1px dashed #000; padding-bottom: 2px;">${member.name}</span></div>
+                    <div>মোবাইল: <span style="font-weight: normal; margin-left: 10px; border-bottom: 1px dashed #000; padding-bottom: 2px;">${member.phone || 'দেওয়া নেই'}</span></div>
+                    <div>ক্রমিক নং: <span style="font-weight: normal; margin-left: 10px; border-bottom: 1px dashed #000; padding-bottom: 2px;">${memberNum}</span></div>
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 15%;">মাস</th>
+                            <th style="width: 12%;">বকেয়া</th>
+                            <th style="width: 13%;">মাসিক চাঁদা</th>
+                            <th style="width: 12%;">মোট দাবী</th>
+                            <th style="width: 12%;">রশিদ নম্বর</th>
+                            <th style="width: 12%;">মোট আদায়</th>
+                            <th style="width: 12%;">মোট বাকী</th>
+                            <th style="width: 12%;">আদায়কারী</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+                
+                <div class="khata-footer">
+                    উক্ত সদস্য থেকে ............................. সালে সর্ব মোট ................................... টাকা গ্রহণ করা হয়েছে।<br>
+                    কথায়: ................................................................................................................................................
+                </div>
+                
+                <div class="khata-signatures">
+                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 150px; text-align: center;">কোষাধ্যক্ষ</div>
+                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 150px; text-align: center;">সাধারণ সম্পাদক</div>
+                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 150px; text-align: center;">সভাপতি</div>
+                </div>
+            </div>
+        `;
+        
+        htmlContent += memberHtml;
+    });
+    
+    khataContainer.innerHTML = htmlContent;
+    
+    // Trigger the print dialog specifically for the khata area
+    triggerPrint('printableKhataArea', 'Members_Khata_' + year, 'print-active-khata');
+}
+

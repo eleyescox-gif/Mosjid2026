@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>মসজিদ আর্থিক ব্যবস্থাপনা</title>
+    <!-- PWA Manifest & Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.png">
+    <meta name="theme-color" content="#2e7d32">
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css?v=7">
+    <!-- SheetJS for Excel Import -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+    <!-- 1. LOGIN OVERLAY -->
+    <div id="loginOverlay" class="login-overlay active">
+        <div class="login-card">
+            <div class="login-logo" id="loginLogoContainer">
+                <i class="fa-solid fa-mosque"></i>
+            </div>
+            <h2 id="loginAppTitle">মসজিদ আর্থিক ব্যবস্থাপনা</h2>
+            <p class="login-subtitle">লগইন করে সিস্টেমে প্রবেশ করুন</p>
+            
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="loginUsername">ব্যবহারকারীর আইডি (Username)</label>
+                    <div class="input-with-icon">
+                        <i class="fa-solid fa-user"></i>
+                        <input type="text" id="loginUsername" class="form-control" placeholder="যেমন: admin" required>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="loginPassword">পাসওয়ার্ড (Password)</label>
+                    <div class="input-with-icon">
+                        <i class="fa-solid fa-lock"></i>
+                        <input type="password" id="loginPassword" class="form-control" placeholder="••••••••" required>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary login-btn">
+                    <i class="fa-solid fa-right-to-bracket"></i> প্রবেশ করুন
+                </button>
+                
+                <div style="text-align: center; margin-top: 15px;">
+                    <a href="#" onclick="openForgotPasswordModal(event)" style="font-size: 12px; color: var(--primary-color); text-decoration: none; font-weight: 600;">
+                        <i class="fa-solid fa-circle-question"></i> পাসওয়ার্ড ভুলে গেছেন?
+                    </a>
+                </div>
+            </form>
+
+
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div class="app-container">
+        <!-- Quick Demo Banner -->
+        <div class="demo-banner" id="demoBanner" style="display:none;">
+            <span>💡 ডেমো ডাটা অ্যাক্টিভ আছে (৬০ জন সদস্য)</span>
+            <button onclick="resetAppDemoData()">রিসেট করুন</button>
+        </div>
+
+        <!-- App Header -->
+        <header class="app-header">
+            <div class="header-top">
+                <div class="mosque-title">
+                    <div id="headerLogoContainer" class="header-logo-style">
+                        <i class="fa-solid fa-mosque"></i>
+                    </div>
+                    <div>
+                        <h1 id="headerTitle">বাইতুল মামুর মসজিদ</h1>
+                        <span class="subtitle" id="roleBadge">ক্যাশিয়ার প্যানেল</span>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="icon-btn logout-btn" onclick="handleLogout()" title="লগআউট করুন">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content (Scrollable Views) -->
+        <main class="app-content" id="appContent">
+
+            <!-- ================== 1. DASHBOARD VIEW ================== -->
+            <section id="dashboard-view" class="app-view active">
+                <!-- Balance Overview Card -->
+                <div class="balance-card">
+                    <div class="balance-label">মোট ফান্ড ব্যালেন্স</div>
+                    <div class="balance-amount"><span class="taka-symbol">৳ </span><span id="totalBalance">0.00</span></div>
+                    <div class="balance-split">
+                        <div class="split-item">
+                            <span class="split-label">হাতে নগদ (Cash)</span>
+                            <span class="split-val">৳ <span id="cashBalance">0.00</span></span>
+                        </div>
+                        <div class="split-item" style="text-align: right;">
+                            <span class="split-label">ব্যাংক ব্যালেন্স</span>
+                            <span class="split-val">৳ <span id="bankBalance">0.00</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ADMIN ONLY: Pending Approvals Section -->
+                <div id="pendingMembersSection" class="pending-section" style="display: none; margin-bottom: 20px;">
+                    <div class="section-header">
+                        <h3>অনুমোদনের জন্য আবেদন (<span id="pendingCount">0</span>)</h3>
+                    </div>
+                    <div class="list-container" id="pendingMembersList">
+                        <!-- Pending members loaded here dynamically -->
+                    </div>
+                </div>
+
+                <!-- Monthly Summary Mini Cards -->
+                <div class="section-header">
+                    <h3>চলতি মাসের সংক্ষেপ</h3>
+                    <span class="subtitle" id="currentMonthYear">জুন ২০২৬</span>
+                </div>
+                <div class="month-stats-grid">
+                    <div class="mini-stat-card">
+                        <div class="stat-icon inc">
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h4>মোট আয়</h4>
+                            <p>৳ <span id="monthlyIncome">0.00</span></p>
+                        </div>
+                    </div>
+                    <div class="mini-stat-card">
+                        <div class="stat-icon exp">
+                            <i class="fa-solid fa-arrow-trend-down"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h4>মোট ব্যয়</h4>
+                            <p>৳ <span id="monthlyExpense">0.00</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Managing Committee Card Section -->
+                <div class="chart-card" style="margin-bottom: 20px;">
+                    <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>পরিচালনা কমিটি</span>
+                        <i class="fa-solid fa-people-group" style="color: var(--secondary-color);"></i>
+                    </div>
+                    <div id="committeeContainer" style="display: flex; gap: 15px; overflow-x: auto; padding-bottom: 10px;">
+                        <!-- Committee members rendered dynamically -->
+                    </div>
+                </div>
+
+                <!-- Recent Transactions -->
+                <div id="recentTransactionsSection">
+                    <div class="section-header">
+                        <h3>সাম্প্রতিক লেনদেন</h3>
+                        <a href="#" onclick="switchView('reports')">সব দেখুন</a>
+                    </div>
+                    <div class="list-container" id="recentTransactionsList">
+                        <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+                            <i class="fa-solid fa-spinner fa-spin" style="margin-bottom: 10px;"></i>
+                            <p>লেনদেন লোড হচ্ছে...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================== 2. MEMBERS VIEW ================== -->
+            <section id="members-view" class="app-view">
+                <!-- Search bar with Search Button -->
+                <div class="search-container" style="display: flex; gap: 8px; margin-bottom: 15px;">
+                    <div style="position: relative; flex: 1;">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="memberSearchInput" placeholder="সদস্যের নাম, নম্বর বা আইডি খুঁজুন..." oninput="filterMembers()">
+                    </div>
+                    <button class="btn btn-primary" onclick="filterMembers()" style="width: auto; height: 44px; padding: 0 16px; margin: 0; display: flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-magnifying-glass"></i> খুঁজুন
+                    </button>
+                </div>
+
+                <div class="filter-bar">
+                    <div class="filter-chip active" onclick="setMemberFilter('all', this)">সকল সদস্য (<span id="countAll">0</span>)</div>
+                    <div class="filter-chip" onclick="setMemberFilter('due', this)">বকেয়া আছে (<span id="countDue">0</span>)</div>
+                    <div class="filter-chip" onclick="setMemberFilter('General', this)">সাধারণ (<span id="countGeneral">0</span>)</div>
+                    <div class="filter-chip" onclick="setMemberFilter('Poor', this)">দরিদ্র (<span id="countPoor">0</span>)</div>
+                    <div class="filter-chip" onclick="setMemberFilter('Free', this)">ফ্রি (<span id="countFree">0</span>)</div>
+                </div>
+
+                <!-- Total Outstanding Arrears Card -->
+                <div id="membersDueSummaryCard" style="display: flex; background-color: var(--danger-light); border: 1.5px solid #f5c6cb; color: #721c24; padding: 12px 16px; border-radius: 14px; margin-bottom: 15px; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm);">
+                    <span style="font-size: 13px; font-weight: 600;"><i class="fa-solid fa-triangle-exclamation"></i> সদস্যদের মোট বকেয়া পরিমাণ:</span>
+                    <span id="totalOutstandingDues" style="font-size: 16px; font-weight: 800; color: var(--danger-color);">৳ ০.০০</span>
+                </div>
+
+                <div class="section-header">
+                    <h3>সদস্য তালিকা</h3>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" style="height: 36px; padding: 0 12px; font-size: 12px; width: auto; background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;" onclick="printArrearsList()">
+                            <i class="fa-solid fa-print"></i> বকেয়া তালিকা
+                        </button>
+                        <button id="addMemberBtn" class="btn btn-primary" style="height: 36px; padding: 0 12px; font-size: 12px; width: auto;" onclick="openModal('add-member-modal')">
+                            <i class="fa-solid fa-user-plus"></i> সদস্য যোগ
+                        </button>
+                    </div>
+                </div>
+
+                <div class="list-container" id="membersList">
+                    <!-- Dynamic members loaded here -->
+                </div>
+            </section>
+
+            <!-- ================== 3. ADD TRANSACTION VIEW ================== -->
+            <section id="add-transaction-view" class="app-view">
+                <div class="section-header" style="margin-bottom: 20px;">
+                    <h3>নতুন লেনদেন এন্ট্রি</h3>
+                </div>
+
+                <div class="chart-card" style="padding: 10px; margin-bottom: 20px; display: flex; gap: 10px; border-radius: 12px;">
+                    <button id="txTypeIncomeBtn" class="btn btn-primary" onclick="setTxFormType('INCOME')" style="flex: 1;">
+                        <i class="fa-solid fa-plus-circle"></i> আয় (Income)
+                    </button>
+                    <button id="txTypeExpenseBtn" class="btn btn-secondary" onclick="setTxFormType('EXPENSE')" style="flex: 1;">
+                        <i class="fa-solid fa-minus-circle"></i> ব্যয় (Expense)
+                    </button>
+                </div>
+
+                <form id="newTransactionForm" onsubmit="handleTransactionSubmit(event)">
+                    <input type="hidden" id="txType" value="INCOME">
+
+                    <div class="form-group">
+                        <label for="txAmount">টাকার পরিমাণ (৳) *</label>
+                        <input type="number" id="txAmount" class="form-control" placeholder="যেমন: ৫০০" required min="1">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="txCategory">খাত/ক্যাটাগরি *</label>
+                        <select id="txCategory" class="form-control" required>
+                            <!-- Options updated dynamically -->
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="txMode">লেনদেন মাধ্যম *</label>
+                        <select id="txMode" class="form-control" required>
+                            <option value="CASH">হাতে নগদ (Cash)</option>
+                            <option value="BANK">ব্যাংক অ্যাকাউন্ট (Bank)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="txDate">তারিখ *</label>
+                        <input type="date" id="txDate" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="txDescription" id="txDescriptionLabel">বিবরণ (ঐচ্ছিক)</label>
+                        <textarea id="txDescription" class="form-control" rows="3" placeholder="লেনদেন সম্পর্কিত সংক্ষিপ্ত তথ্য..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="margin-top: 10px;">
+                        <i class="fa-solid fa-save"></i> সংরক্ষণ করুন
+                    </button>
+                </form>
+            </section>
+
+            <!-- ================== 4. REPORTS VIEW ================== -->
+            <section id="reports-view" class="app-view">
+                <div class="section-header">
+                    <h3>মাসিক প্রতিবেদন ও বিবরণী</h3>
+                </div>
+
+                <div class="report-period-selector">
+                    <select id="reportMonth" class="form-control" onchange="loadReports()">
+                        <option value="1">জানুয়ারি</option>
+                        <option value="2">ফেব্রুয়ারি</option>
+                        <option value="3">মার্চ</option>
+                        <option value="4">এপ্রিল</option>
+                        <option value="5">মে</option>
+                        <option value="6">জুন</option>
+                        <option value="7">জুলাই</option>
+                        <option value="8">আগস্ট</option>
+                        <option value="9">সেপ্টেম্বর</option>
+                        <option value="10">অক্টোবর</option>
+                        <option value="11">নভেম্বর</option>
+                        <option value="12">ডিসেম্বর</option>
+                    </select>
+                    <select id="reportYear" class="form-control" onchange="loadReports()">
+                        <option value="2026">২০২৬</option>
+                        <option value="2027">২০২৭</option>
+                    </select>
+                </div>
+
+
+
+                <div class="chart-card">
+                    <div class="chart-title">আর্থিক বিবরণী</div>
+                    <div class="summary-list">
+                        <div class="summary-item">
+                            <span>মোট আয়</span>
+                            <span class="text-success">৳ <span id="reportTotalIncome">0.00</span></span>
+                        </div>
+                        <div class="summary-item">
+                            <span>মোট ব্যয়</span>
+                            <span class="text-danger" style="color: var(--danger-color);">৳ <span id="reportTotalExpense">0.00</span></span>
+                        </div>
+                        <div class="summary-item" style="border-bottom: none; font-weight: bold;">
+                            <span>নিট উদ্বৃত্ত</span>
+                            <span id="reportNetBalance">৳ 0.00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-header">
+                    <h3>খাতভিত্তিক বিবরণ</h3>
+                </div>
+                <div class="reports-breakdown-grid" id="categoryBreakdownContainer" style="margin-bottom: 20px;">
+                    <div class="reports-breakdown-col">
+                        <div class="col-header col-header-income">
+                            <i class="fa-solid fa-circle-arrow-down"></i> আয়
+                        </div>
+                        <div class="list-container" id="categoryBreakdownIncomeList" style="margin-bottom: 0; box-shadow: none; border: 1px solid var(--border-color); border-radius: 12px; padding: 8px;"></div>
+                    </div>
+                    <div class="reports-breakdown-col">
+                        <div class="col-header col-header-expense">
+                            <i class="fa-solid fa-circle-arrow-up"></i> ব্যয়
+                        </div>
+                        <div class="list-container" id="categoryBreakdownExpenseList" style="margin-bottom: 0; box-shadow: none; border: 1px solid var(--border-color); border-radius: 12px; padding: 8px;"></div>
+                    </div>
+                </div>
+
+                <!-- Print Institution Statement Triggers -->
+                <div style="display: flex; gap: 10px; flex-direction: column;">
+                    <button class="btn btn-secondary print-report-btn" onclick="generateInstitutionPrintReport()">
+                        <i class="fa-solid fa-print"></i> মাসিক বিবরণী প্রিন্ট (A4)
+                    </button>
+                    <button class="btn btn-primary print-report-btn" onclick="generateFullInstitutionPrintReport()">
+                        <i class="fa-solid fa-file-pdf"></i> পূর্ণাঙ্গ বিবরণী প্রিন্ট (A4)
+                    </button>
+                </div>
+            </section>
+
+            <!-- ================== 5. PROFILE / SETTINGS VIEW ================== -->
+            <section id="profile-view" class="app-view">
+                <div class="profile-header">
+                    <div id="profileLogoContainer" class="profile-logo-style">
+                        <i class="fa-solid fa-mosque"></i>
+                    </div>
+                    <div class="profile-name" id="profileInstitutionName">বাইতুল মামুর জামে মসজিদ</div>
+                    <div class="profile-role" id="profileRoleName">ক্যাশিয়ার প্যানেল</div>
+                </div>
+
+                <!-- ADMIN ONLY: Institution Settings Section -->
+                <div id="mosqueSettingsSection" class="chart-card" style="margin-bottom: 20px; display: none;">
+                    <div class="chart-title" style="margin-bottom: 12px;">
+                        <span>প্রতিষ্ঠানের সেটিংস (এডমিন প্যানেল)</span>
+                        <i class="fa-solid fa-sliders" style="color: var(--secondary-color);"></i>
+                    </div>
+                    <form id="mosqueSettingsForm" onsubmit="handleSettingsSubmit(event)">
+                        <div class="form-group">
+                            <label for="setMosqueName">প্রতিষ্ঠানের নাম *</label>
+                            <input type="text" id="setMosqueName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="setMosqueAddress">ঠিকানা ও স্লোগান *</label>
+                            <input type="text" id="setMosqueAddress" class="form-control" required placeholder="যেমন: স্থাপিত: ১৯৯৫ খ্রি. | গ্রাম: মধ্যপাড়া">
+                        </div>
+                        <div class="form-group">
+                            <label for="setMosqueLogo">প্রতিষ্ঠানের লোগো (আপলোড)</label>
+                            <input type="file" id="setMosqueLogo" class="form-control" accept="image/*" style="padding-top: 10px;">
+                            <small class="subtitle" style="display: block; margin-top: 4px;">PNG/JPG ফাইল নির্বাচন করুন (সর্বোচ্চ ৫০০KB)</small>
+                            <div id="logoPreviewContainer" style="margin-top: 10px; display: none;">
+                                <span style="font-size: 11px; color: var(--text-muted);">লোগো প্রিভিউ:</span>
+                                <img id="logoPreviewImg" src="" style="height: 50px; display: block; border-radius: 50%; margin-top: 5px; border: 1px solid var(--border-color);">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="setBankAccountNo">ব্যাংক হিসাব নম্বর</label>
+                            <input type="text" id="setBankAccountNo" class="form-control" placeholder="যেমন: ১২৩৪৫৬৭৮৯">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="setInitialBankBalance">ব্যাংক ব্যালেন্স (৳) *</label>
+                                <input type="number" id="setInitialBankBalance" class="form-control" min="0" value="0" required>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="setInitialCashBalance">হাতে নগদ অর্থ (৳) *</label>
+                                <input type="number" id="setInitialCashBalance" class="form-control" min="0" value="0" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="height: 38px;">
+                            <i class="fa-solid fa-floppy-disk"></i> সেটিংস সংরক্ষণ করুন
+                        </button>
+                    </form>
+                </div>
+
+                <!-- ADMIN ONLY: Bulk Member Import Section -->
+                <div id="adminBulkImportSection" class="chart-card" style="margin-bottom: 20px; display: none;">
+                    <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>বাল্ক সদস্য ইনপুট (Excel/CSV)</span>
+                        <i class="fa-solid fa-file-excel" style="color: var(--secondary-color);"></i>
+                    </div>
+                    <div style="background: var(--primary-light)11; border: 1px solid var(--primary-light)44; border-radius: 12px; padding: 15px;">
+                        <p style="font-size: 11px; color: var(--text-main); line-height: 1.6; margin-bottom: 12px;">
+                            <i class="fa-solid fa-circle-info" style="color: var(--primary-color);"></i> <strong>বাল্ক আপলোড নির্দেশিকা:</strong><br>
+                            ১. এক্সেল বা সিএসভি ফাইলের প্রথম সারিতে (Header Row) অবশ্যই এই তিনটি কলাম থাকতে হবে: <strong>Name</strong> (সদস্যের নাম), <strong>Mobile</strong> (মোবাইল নম্বর), এবং <strong>Arrears</strong> (বকেয়া টাকা)।<br>
+                            ২. বকেয়া টাকা না থাকলে ০ লিখবেন। মোবাইল নম্বর অবশ্যই ১১ ডিজিটের হতে হবে।
+                        </p>
+                        <input type="file" id="bulkMemberFileInput" accept=".xlsx, .xls, .csv" style="display:none;" onchange="handleBulkImport(event)">
+                        <button class="btn btn-primary" onclick="document.getElementById('bulkMemberFileInput').click()" style="width: 100%; height: 42px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <i class="fa-solid fa-upload"></i> এক্সেল ফাইল আপলোড করুন
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ADMIN ONLY: Committee Management Section -->
+                <div id="adminCommitteeSection" class="chart-card" style="margin-bottom: 20px; display: none;">
+                    <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>পরিচালনা কমিটি গঠন (এডমিন প্যানেল)</span>
+                        <i class="fa-solid fa-user-plus" style="color: var(--secondary-color);"></i>
+                    </div>
+                    <form id="addCommitteeForm" onsubmit="handleAddCommitteeSubmit(event)" style="margin-bottom: 15px;">
+                        <input type="hidden" id="editCommId" value="">
+                        
+                        <div class="form-group" style="margin-bottom: 10px;">
+                            <label style="font-size: 11px; font-weight: 600;">সদস্যের নাম *</label>
+                            <input type="text" id="commName" class="form-control" placeholder="যেমন: আলহাজ্ব মো: আব্দুর রহমান" required style="padding: 6px 10px; font-size: 12px;">
+                        </div>
+                        <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                            <div class="form-group">
+                                <label style="font-size: 11px; font-weight: 600;">পদবী *</label>
+                                <input type="text" id="commDesignation" class="form-control" placeholder="যেমন: সভাপতি" required style="padding: 6px 10px; font-size: 12px;">
+                            </div>
+                            <div class="form-group">
+                                <label style="font-size: 11px; font-weight: 600;">মোবাইল নম্বর *</label>
+                                <input type="text" id="commPhone" class="form-control" placeholder="01711XXXXXX" required style="padding: 6px 10px; font-size: 12px;">
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label style="font-size: 11px; font-weight: 600;">সদস্যের ছবি (আপলোড)</label>
+                            <input type="file" id="commPhoto" class="form-control" accept="image/*" style="padding: 4px; font-size: 11px;">
+                            <div id="commPhotoPreview" style="display: none; margin-top: 8px;">
+                                <span style="font-size: 10px; color: var(--text-muted);">ছবি প্রিভিউ:</span>
+                                <img id="commPreviewImg" src="" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-color); display: block; margin-top: 4px;">
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;" id="commFormActions">
+                            <button type="submit" id="commSubmitBtn" class="btn btn-primary" style="flex: 1; font-size: 12px; padding: 8px;">কমিটিতে যোগ করুন</button>
+                            <button type="button" id="commCancelBtn" class="btn btn-secondary" onclick="cancelCommitteeEdit()" style="flex: 1; font-size: 12px; padding: 8px; display: none;">বাতিল করুন</button>
+                        </div>
+                    </form>
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+                        <h4 style="font-size: 12px; margin-bottom: 8px; font-weight: 600;">বর্তমান কমিটি তালিকা:</h4>
+                        <div id="adminCommitteeList" style="display: flex; flex-direction: column; gap: 8px;">
+                            <!-- Dynamic list with delete buttons -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ADMIN ONLY: Recycle Bin Section -->
+                <div id="adminRecycleBinSection" class="chart-card" style="margin-bottom: 20px; display: none;">
+                    <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>রিসাইকেল বিন (মুছে ফেলা সদস্য)</span>
+                        <i class="fa-solid fa-trash-arrow-up" style="color: var(--danger-color);"></i>
+                    </div>
+                    <div id="recycleBinList" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Soft-deleted members rendered dynamically -->
+                    </div>
+                </div>
+
+                <!-- ADMIN ONLY: Global DB Recycle Bin Section -->
+                <div id="adminGlobalRecycleBinSection" class="chart-card" style="margin-bottom: 20px; display: none; border-color: var(--warning-color);">
+                    <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>ডাটাবেস রিসাইকেল বিন (৩০ দিন)</span>
+                        <i class="fa-solid fa-database" style="color: var(--warning-color);"></i>
+                    </div>
+                    <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">মোছা হওয়া ডাটাবেস এখানে ৩০ দিন পর্যন্ত জমা থাকে।</p>
+                    <div id="globalRecycleBinList" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Global DB snapshots rendered dynamically -->
+                    </div>
+                </div>
+
+                <!-- ADMIN ONLY: Password & Recovery Phone Management Form -->
+                <div id="passwordChangeSection" class="chart-card" style="margin-bottom: 20px;">
+                    <div class="chart-title" style="margin-bottom: 12px;">
+                        <span>পাসওয়ার্ড ও রিকভারি মোবাইল ব্যবস্থাপনা</span>
+                        <i class="fa-solid fa-user-shield" style="color: var(--accent-dark);"></i>
+                    </div>
+                    <form id="changePasswordForm" onsubmit="handleChangePassword(event)">
+                        <div class="form-group">
+                            <label for="changeRoleSelect">ব্যবহারকারী নির্বাচন করুন *</label>
+                            <select id="changeRoleSelect" class="form-control" required onchange="handleRoleSelectChange()">
+                                <option value="admin">এডমিন (Admin)</option>
+                                <option value="secretary">সাধারণ সম্পাদক (Secretary)</option>
+                                <option value="cashier">ক্যাশিয়ার (Cashier)</option>
+                                <option value="member">সাধারণ সদস্য (Member)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="changeRoleUsername">ইউজার আইডি (Username) *</label>
+                            <input type="text" id="changeRoleUsername" class="form-control" placeholder="যেমন: member" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="changeNewPassword">নতুন পাসওয়ার্ড (পরিবর্তন না করতে চাইলে ফাঁকা রাখুন)</label>
+                            <input type="password" id="changeNewPassword" class="form-control" placeholder="ন্যূনতম ৪ ডিজিট" minlength="4">
+                        </div>
+                        <div class="form-group" id="recoveryPhoneGroup">
+                            <label for="changeRolePhone">রিকভারি মোবাইল নম্বর *</label>
+                            <input type="text" id="changeRolePhone" class="form-control" placeholder="যেমন: 01711XXXXXX" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="height: 38px;">
+                            <i class="fa-solid fa-floppy-disk"></i> তথ্য সংরক্ষণ করুন
+                        </button>
+                    </form>
+                </div>
+
+                <div class="section-header">
+                    <h3>মাসিক চাঁদার হার</h3>
+                </div>
+                <div class="profile-details-list">
+                    <div class="profile-detail-item">
+                        <span class="profile-detail-label">সাধারণ সদস্য</span>
+                        <span class="profile-detail-val">৳ ১৫০ / মাস</span>
+                    </div>
+                    <div class="profile-detail-item">
+                        <span class="profile-detail-label">দরিদ্র সদস্য</span>
+                        <span class="profile-detail-val">৳ ১০০ / মাস</span>
+                    </div>
+                    <div class="profile-detail-item">
+                        <span class="profile-detail-label">ফ্রি সদস্য</span>
+                        <span class="profile-detail-val">৳ ০ / মাস</span>
+                    </div>
+                </div>
+
+                <div id="adminKhataMakeControls" style="display: none; margin-bottom: 20px;">
+                    <div class="section-header">
+                        <h3>খাতা তৈরি (Khata Make)</h3>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 12px; box-shadow: var(--shadow-sm); border: 1px solid var(--border-color);">
+                        <label style="font-size: 13px; font-weight: 600; margin-bottom: 8px; display: block;">খাতার বছর নির্বাচন করুন</label>
+                        <select id="khataMakeYear" class="form-control" style="margin-bottom: 12px;">
+                            <option value="2025">২০২৫</option>
+                            <option value="2026" selected>২০২৬</option>
+                            <option value="2027">২০২৭</option>
+                            <option value="2028">২০২৮</option>
+                        </select>
+                        <button class="btn btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="generateAllMembersKhata()">
+                            <i class="fa-solid fa-book-open"></i> সকল সদস্যের খাতা প্রিন্ট করুন
+                        </button>
+                    </div>
+                </div>
+
+                <div id="adminSystemControls" style="display: none;">
+                    <div class="section-header">
+                        <h3>সিস্টেম কন্ট্রোল</h3>
+                    </div>
+                    <button class="btn btn-secondary" style="margin-bottom: 12px; background-color: #fff3cd; color: #856404;" onclick="resetAppDemoData()">
+                        <i class="fa-solid fa-rotate-left"></i> ডেমো ডাটা রিসেট করুন
+                    </button>
+                    <button class="btn btn-secondary" style="background-color: var(--danger-light); color: var(--danger-color); border: 1px solid #f5c6cb;" onclick="clearAllData()">
+                        <i class="fa-solid fa-trash-can"></i> সব ডাটা মুছে ফেলুন
+                    </button>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Bottom Navigation Bar -->
+        <nav class="bottom-nav">
+            <div class="nav-item active" onclick="switchView('dashboard')" id="nav-dashboard">
+                <i class="fa-solid fa-house"></i>
+                <span>হোম</span>
+            </div>
+            <div class="nav-item" onclick="switchView('members')" id="nav-members">
+                <i class="fa-solid fa-users"></i>
+                <span>সদস্যগণ</span>
+            </div>
+            <div class="nav-item fab-item" onclick="switchView('add-transaction')" id="nav-add-transaction">
+                <div class="fab-btn">
+                    <i class="fa-solid fa-plus"></i>
+                </div>
+            </div>
+            <div class="nav-item" onclick="switchView('reports')" id="nav-reports">
+                <i class="fa-solid fa-file-invoice-dollar"></i>
+                <span>বিবরণী</span>
+            </div>
+            <div class="nav-item" onclick="switchView('profile')" id="nav-profile">
+                <i class="fa-solid fa-gears"></i>
+                <span>সেটিংস</span>
+            </div>
+        </nav>
+    </div>
+
+    <!-- MODALS SECTION -->
+
+    <!-- Modal 1: Add New Member -->
+    <div id="add-member-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 id="addMemberModalTitle">নতুন সদস্য যুক্ত করুন</h4>
+                <button class="icon-btn" onclick="closeModal('add-member-modal')" style="background: none; color: var(--text-main);"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="newMemberForm" onsubmit="handleNewMemberSubmit(event)">
+                <input type="hidden" id="editMemberId">
+
+                <div class="form-group">
+                    <label for="mName">নাম *</label>
+                    <input type="text" id="mName" class="form-control" placeholder="সদস্যের পুরো নাম লিখুন" required>
+                </div>
+                <div class="form-group">
+                    <label for="mPhone">মোবাইল নম্বর *</label>
+                    <input type="tel" id="mPhone" class="form-control" placeholder="১১ ডিজিটের মোবাইল নম্বর" required pattern="[0-9]{11}">
+                </div>
+                <div class="form-group">
+                    <label for="mAddress">গ্রাম/পাড়া *</label>
+                    <input type="text" id="mAddress" class="form-control" placeholder="যেমন: মধ্যপাড়া" required>
+                </div>
+                
+                <div class="form-group" id="mTypeGroup">
+                    <label for="mType">চাঁদার ধরন *</label>
+                    <select id="mType" class="form-control" onchange="adjustFeeAmountInput()" required>
+                        <option value="General">সাধারণ সদস্য (৳ ১৫০/মাস)</option>
+                        <option value="Poor">দরিদ্র সদস্য (৳ ১০০/মাস)</option>
+                        <option value="Free">ফ্রি সদস্য (চাঁদা মওকুফ - ৳ ০/মাস)</option>
+                    </select>
+                </div>
+                <div class="form-group" id="mCustomFeeGroup">
+                    <label for="mCustomFee">চাঁদার পরিমাণ (৳) *</label>
+                    <input type="number" id="mCustomFee" class="form-control" value="150" min="0" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="saveMemberBtn">সংরক্ষণ করুন</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 2: Member Details (NO subscriptionGrid Calendar grid shown here anymore!) -->
+    <div id="member-details-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)">
+        <div class="modal-content" style="max-height: 90%;">
+            <div class="modal-header">
+                <h4 id="mdModalName">সদস্য প্রোফাইল</h4>
+                <div style="display: flex; gap: 8px;">
+                    <button id="mdEditBtn" class="icon-btn" style="background: var(--primary-light); color: var(--primary-dark);" title="সম্পাদনা">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                    </button>
+                    <button id="mdDeleteBtn" class="icon-btn" style="background: var(--danger-light); color: var(--danger-color);" title="সদস্য বাতিল">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                    <button class="icon-btn" onclick="closeModal('member-details-modal')" style="background: none; color: var(--text-main);"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            
+            <div style="background-color: var(--bg-color); border-radius: 12px; padding: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <p id="mdModalPhone" style="font-size: 13px; color: var(--text-muted); margin-bottom: 2px;"><i class="fa-solid fa-phone"></i> ০১XXXXXXXXX</p>
+                    <p id="mdModalAddress" style="font-size: 13px; color: var(--text-muted); margin-bottom: 2px;"><i class="fa-solid fa-location-dot"></i> ঠিকানা</p>
+                    <p id="mdModalType"><span class="member-type-badge general">সাধারণ</span></p>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 11px; color: var(--text-muted);">মোট বকেয়া</div>
+                    <div id="mdModalTotalDue" style="font-size: 20px; font-weight: bold;" class="text-danger">৳ ০.০০</div>
+                </div>
+            </div>
+
+            <!-- EASY COLLECTION PANEL -->
+            <div id="easyPaymentPanel" class="chart-card" style="display: none; border: 1.5px solid var(--primary-light); background: var(--primary-light)1a; margin-bottom: 20px;">
+                <div class="chart-title" style="margin-bottom: 12px; font-size: 13px;">
+                    <span>সহজ চাঁদা আদায়</span>
+                    <i class="fa-solid fa-calculator" style="color: var(--secondary-color);"></i>
+                </div>
+                <form id="easyPaymentForm" onsubmit="handleEasyPaymentSubmit(event)">
+                    <input type="hidden" id="epMemberId">
+                    <input type="hidden" id="epTotalDueHidden">
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="epDate">আজকের তারিখ</label>
+                            <input type="date" id="epDate" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="epReceiptNo">রশিদ নম্বর *</label>
+                            <input type="text" id="epReceiptNo" class="form-control" placeholder="যেমন: ১২৩৪" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row" style="grid-template-columns: 1fr;">
+                        <div class="form-group">
+                            <label for="epAmount">পরিশোধিত/অগ্রিম টাকা (৳) * <span style="font-size:10px;font-weight:normal;color:var(--text-muted);">(বকেয়ার বেশি দিলে তা অগ্রিম জমা হবে)</span></label>
+                            <input type="number" id="epAmount" class="form-control" placeholder="টাকা লিখুন" required min="1" oninput="calculateRealtimeNextDue()" onkeyup="calculateRealtimeNextDue()" onchange="calculateRealtimeNextDue()">
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: white; padding: 10px 15px; border-radius: 10px; border: 1px solid var(--border-color);">
+                        <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">পরবর্তী বকেয়া:</span>
+                        <span id="epNextDueText" style="font-size: 15px; font-weight: bold; color: var(--primary-color);">৳ ০.০০</span>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="height: 40px; font-size: 13px;">
+                        <i class="fa-solid fa-circle-check"></i> পরিশোধ এন্ট্রি করুন
+                    </button>
+                </form>
+            </div>
+
+            <!-- 3. President Fee Waiver Panel (President Only) -->
+            <div id="presidentWaiverPanel" class="chart-card" style="display: none; border: 1.5px solid #ffc107; background: #fffdf5; margin-bottom: 20px;">
+                <div class="chart-title" style="margin-bottom: 12px; font-size: 13px; color: #b27a00; display: flex; justify-content: space-between; align-items: center;">
+                    <span>চাঁদা মওকুফ এন্ট্রি (সভাপতি প্যানেল)</span>
+                    <i class="fa-solid fa-hand-holding-hand" style="color: #ffc107;"></i>
+                </div>
+                <form id="waiverForm" onsubmit="handleWaiverSubmit(event)">
+                    <input type="hidden" id="wpMemberId">
+                    <div class="form-row" style="grid-template-columns: 1fr;">
+                        <div class="form-group">
+                            <label for="wpAmount">মওকুফের পরিমাণ (৳) *</label>
+                            <input type="number" id="wpAmount" class="form-control" placeholder="মওকুফের পরিমাণ লিখুন" required min="1">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label for="wpReason">মওকুফের কারণ *</label>
+                        <input type="text" id="wpReason" class="form-control" placeholder="যেমন: পারিবারিক বা আর্থিক অসুবিধা" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="background-color: #ffc107; border-color: #ffc107; color: #000; font-weight: bold; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-check"></i> মওকুফ সংরক্ষণ করুন
+                    </button>
+                </form>
+            </div>
+
+            <!-- 4. Secretary/Admin Arrears Adjustment Panel -->
+            <div id="secretaryArrearsPanel" class="chart-card" style="display: none; border: 1.5px solid var(--primary-color); background: var(--primary-light)08; margin-bottom: 20px;">
+                <div class="chart-title" style="margin-bottom: 12px; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+                    <span>বকেয়া টাকা বৃদ্ধি/হ্রাস (সম্পাদক/এডমিন)</span>
+                    <i class="fa-solid fa-scale-balanced" style="color: var(--primary-color);"></i>
+                </div>
+                <form id="arrearsAdjustmentForm" onsubmit="handleArrearsAdjustmentSubmit(event)">
+                    <input type="hidden" id="adjMemberId">
+                    
+                    <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div class="form-group">
+                            <label for="adjType">সমন্বয়ের ধরন *</label>
+                            <select id="adjType" class="form-control" required style="font-size: 12px; padding: 8px;">
+                                <option value="decrease">বকেয়া কমান (হ্রাস/মওকুফ)</option>
+                                <option value="increase">বকেয়া বাড়ান (বৃদ্ধি/যোগ)</option>
+                                <option value="advance_increase">অগ্রিম জমা বাড়ান (যোগ)</option>
+                                <option value="advance_decrease">অগ্রিম জমা কমান (বিয়োগ)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="adjAmount">টাকার পরিমাণ (৳) *</label>
+                            <input type="number" id="adjAmount" class="form-control" placeholder="টাকা লিখুন" required min="1" style="font-size: 12px; padding: 8px;">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label for="adjReason">সমন্বয়ের কারণ/মন্তব্য *</label>
+                        <input type="text" id="adjReason" class="form-control" placeholder="যেমন: ভুল এন্ট্রি সংশোধন বা বিগত বছরের বকেয়া" required style="font-size: 12px; padding: 8px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="height: 38px; font-size: 12px;">
+                        <i class="fa-solid fa-circle-check"></i> সমন্বয় নিশ্চিত করুন
+                    </button>
+                </form>
+            </div>
+
+            <!-- Action buttons container (Suspend, Request Delete, Deletion Requests Approval) -->
+            <div id="mdActionButtonsSection" style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px; margin-bottom: 10px;">
+                <!-- Dynamically populated buttons -->
+            </div>
+
+            <!-- Print Individual Yearly Report Button -->
+            <button id="mdPrintYearlyBtn" class="btn btn-primary" style="margin-bottom: 10px; background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-color) 100%);" onclick="generateYearlyPrintReport()">
+                <i class="fa-solid fa-file-pdf"></i> বাৎসরিক বিবরণী প্রিন্ট (A4)
+            </button>
+
+            <button class="btn btn-secondary" onclick="closeModal('member-details-modal')" style="margin-top: 10px;">বন্ধ করুন</button>
+        </div>
+    </div>
+
+    <!-- ================== DEDICATED ARREARS LIST PRINT LAYOUT ================== -->
+    <div id="printableArrearsListArea" class="print-only">
+        <div class="print-pad-header">
+            <div id="printArrearsLogoContainer" style="display: flex; justify-content: center; margin-bottom: 10px;">
+                <!-- Logo dynamically loaded -->
+            </div>
+            <h2 id="printArrearsName">বাইতুল মামুর জামে মসজিদ</h2>
+            <p id="printArrearsAddress">স্থাপিত: ১৯৯৫ খ্রি. | গ্রাম: মধ্যপাড়া, ডাকঘর: বাজারপাড়া</p>
+            <hr style="border: 0.5px solid #000; margin-top: 5px; margin-bottom: 5px;">
+        </div>
+        <h3 id="arrearsPrintTitle" style="text-align: center; margin-top: 0; margin-bottom: 20px; font-size: 18px; text-decoration: underline; font-weight: bold;">
+            সদস্যদের বকেয়া চাঁদার তালিকা
+        </h3>
+        
+        <table id="printableArrearsTable" style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 40px;">
+            <thead>
+                <tr style="background-color: #f2f2f2;">
+                    <th style="border: 1px solid #000 !important; padding: 6px !important; text-align: center; width: 50px;">ক্র:নং</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px !important;">নাম</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px !important;">মোবাইল</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px !important; text-align: center;">বকেয়া</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px !important;">মন্তব্য</th>
+                </tr>
+            </thead>
+            <tbody id="printArrearsTableBody">
+                <!-- Loaded dynamically -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ================== DEDICATED A4 MEMBER PRINT LAYOUT ================== -->
+    <!-- (Strictly ONLY Member Info and table shown, NO Pad Header/Logo here!) -->
+    <div id="printableMemberReceiptArea" class="print-only">
+        <h3 style="text-align: center; margin-top: 0; margin-bottom: 20px; font-size: 18px; text-decoration: underline; font-weight: bold;">
+            সদস্যের বাৎসরিক চাঁদা পরিশোধের বিবরণী (২০২৬)
+        </h3>
+        
+        <div style="margin-bottom: 20px; font-size: 13px; line-height: 1.8; border: 1px solid #000; padding: 12px; border-radius: 8px;">
+            <table style="width: 100%; border: none !important; margin: 0 !important; border-collapse: collapse !important;">
+                <tr style="border: none !important;">
+                    <td style="border: none !important; padding: 0 !important; font-weight: normal; text-align: left; width: 50%;">
+                        <strong>সদস্য নাম:</strong> <span id="printName"></span>
+                    </td>
+                    <td style="border: none !important; padding: 0 !important; font-weight: normal; text-align: right; width: 50%;">
+                        <strong>মোবাইল নম্বর:</strong> <span id="printPhone"></span>
+                    </td>
+                </tr>
+                <tr style="border: none !important;">
+                    <td style="border: none !important; padding: 0 !important; font-weight: normal; text-align: left; padding-top: 5px; width: 50%;">
+                        <strong>ঠিকানা:</strong> <span id="printAddress"></span>
+                    </td>
+                    <td style="border: none !important; padding: 0 !important; font-weight: normal; text-align: right; padding-top: 5px; width: 50%;">
+                        <strong>সদস্য ধরণ:</strong> <span id="printType"></span>
+                    </td>
+                </tr>
+                <tr style="border: none !important;">
+                    <td style="border: none !important; padding: 0 !important; font-weight: normal; text-align: left; padding-top: 5px; width: 50%;">
+                        <strong>অতিরিক্ত অগ্রিম জমা:</strong> ৳ <span id="printAdvance">০.০০</span>
+                    </td>
+                    <td style="border: none !important; padding: 0 !important; font-weight: normal; text-align: right; padding-top: 5px; width: 50%;">
+                        <strong>পরিশোধের মেয়াদ (অগ্রিম সহ):</strong> <span id="printPaidUpTo">—</span>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        
+        <table id="printableReportTable" style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 40px;">
+            <thead>
+                <tr style="background-color: #f2f2f2;">
+                    <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 15%;">মাসের নাম</th>
+                    <th style="border: 1px solid #000; padding: 6px; text-align: right; width: 15%;">ধার্যকৃত চাঁদা (৳)</th>
+                    <th style="border: 1px solid #000; padding: 6px; text-align: right; width: 15%;">পরিশোধিত (৳)</th>
+                    <th style="border: 1px solid #000; padding: 6px; text-align: right; width: 15%;">বকেয়া (৳)</th>
+                    <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 22%;">পরিশোধের তারিখ</th>
+                    <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 18%;">রশিদ নম্বর</th>
+                </tr>
+            </thead>
+            <tbody id="printTableBody">
+                <!-- Loaded dynamically -->
+            </tbody>
+        </table>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 80px; padding: 0 30px; font-size: 13px;">
+            <div style="text-align: center; border-top: 1px dashed #000; width: 140px; padding-top: 5px;">ক্যাশিয়ার</div>
+            <div style="text-align: center; border-top: 1px dashed #000; width: 140px; padding-top: 5px;">সাধারণ সম্পাদক</div>
+            <div style="text-align: center; border-top: 1px dashed #000; width: 140px; padding-top: 5px;">সভাপতি</div>
+        </div>
+    </div>
+
+    <!-- ================== DEDICATED A4 INSTITUTION PRINT LAYOUT ================== -->
+    <!-- (Official Mosque Header Pad with Logo, Slogan, and Monthly general breakdown) -->
+    <div id="printableInstitutionReceiptArea" class="print-only">
+        <div class="print-pad-header">
+            <div id="printInstLogoContainer" style="display: flex; justify-content: center; margin-bottom: 10px;">
+                <!-- Logo dynamically loaded -->
+            </div>
+            <h2 id="printInstName">বাইতুল মামুর জামে মসজিদ</h2>
+            <p id="printInstAddress">স্থাপিত: ১৯৯৫ খ্রি. | গ্রাম: মধ্যপাড়া, ডাকঘর: বাজারপাড়া</p>
+            <hr style="border: 0.5px solid #000; margin-top: 5px; margin-bottom: 5px;">
+        </div>
+        
+        <h3 style="text-align: center; margin: 15px 0; font-size: 18px; text-decoration: underline; font-weight: bold;">
+            প্রতিষ্ঠানের মাসিক আয়-ব্যয় বিবরণী
+        </h3>
+        
+        <div style="margin-bottom: 20px; font-size: 13px; line-height: 1.8; border: 1px solid #000; padding: 10px; border-radius: 8px; display: flex; justify-content: space-between;">
+            <div><strong>বিবরণীর মাস:</strong> <span id="printInstMonth"></span></div>
+            <div><strong>রিপোর্ট প্রকাশের তারিখ:</strong> <span id="printInstToday"></span></div>
+        </div>
+
+        <!-- Summary boxes inside printed PDF -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px;">
+            <div style="border: 1px solid #000; padding: 10px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; font-weight: bold; color: #555;">মোট আয়</div>
+                <div id="printInstTotalIncome" style="font-size: 16px; font-weight: bold; color: green; margin-top: 3px;">৳ ০.০০</div>
+            </div>
+            <div style="border: 1px solid #000; padding: 10px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; font-weight: bold; color: #555;">মোট ব্যয়</div>
+                <div id="printInstTotalExpense" style="font-size: 16px; font-weight: bold; color: red; margin-top: 3px;">৳ ০.০০</div>
+            </div>
+            <div style="border: 1px solid #000; padding: 10px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; font-weight: bold; color: #555;">নিট উদ্বৃত্ত</div>
+                <div id="printInstNetBalance" style="font-size: 16px; font-weight: bold; margin-top: 3px;">৳ ০.০০</div>
+            </div>
+        </div>
+        
+        <table id="printableInstReportTable" style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 40px; table-layout: fixed;">
+            <thead>
+                <tr>
+                    <th colspan="3" style="border: 1.5px solid #000 !important; background-color: #f2f2f2 !important; text-align: center; font-weight: bold; font-size: 12px !important; padding: 6px !important;">আয় (Income)</th>
+                    <th colspan="3" style="border: 1.5px solid #000 !important; background-color: #f2f2f2 !important; text-align: center; font-weight: bold; font-size: 12px !important; padding: 6px !important;">ব্যয় (Expense)</th>
+                </tr>
+                <tr style="background-color: #fafafa;">
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: left; width: 12%;">তারিখ</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: left; width: 23%;">আয়ের বিবরণ</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: right; width: 15%;">পরিমাণ (৳)</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: left; width: 12%;">তারিখ</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: left; width: 23%;">ব্যয়ের বিবরণ</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: right; width: 15%;">পরিমাণ (৳)</th>
+                </tr>
+            </thead>
+            <tbody id="printInstTableBody">
+                <!-- Loaded dynamically side-by-side -->
+            </tbody>
+            <tfoot>
+                <tr style="font-weight: bold; background-color: #f2f2f2;">
+                    <td colspan="2" style="border: 1px solid #000 !important; padding: 6px !important; font-size: 11px !important;">মোট আয়ের পরিমাণ</td>
+                    <td id="printInstFooterTotalIncome" style="border: 1px solid #000 !important; padding: 6px !important; font-size: 11px !important; text-align: right;">৳ ০.০০</td>
+                    <td colspan="2" style="border: 1px solid #000 !important; padding: 6px !important; font-size: 11px !important;">মোট ব্যয়ের পরিমাণ</td>
+                    <td id="printInstFooterTotalExpense" style="border: 1px solid #000 !important; padding: 6px !important; font-size: 11px !important; text-align: right;">৳ ০.০০</td>
+                </tr>
+            </tfoot>
+        </table>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 80px; padding: 0 30px; font-size: 13px;">
+            <div style="text-align: center; border-top: 1px dashed #000; width: 140px; padding-top: 5px;">ক্যাশিয়ার</div>
+            <div style="text-align: center; border-top: 1px dashed #000; width: 140px; padding-top: 5px;">সাধারণ সম্পাদক</div>
+            <div style="text-align: center; border-top: 1px dashed #000; width: 140px; padding-top: 5px;">সভাপতি</div>
+        </div>
+    </div>
+    <!-- ================== DEDICATED A4 FULL INSTITUTION PRINT LAYOUT ================== -->
+    <!-- (Official Mosque Header Pad with Logo, Slogan, and Monthly general breakdown + Eza) -->
+    <div id="printableFullInstitutionReceiptArea" class="print-only">
+        <div class="print-pad-header">
+            <div id="printFullInstLogoContainer" style="display: flex; justify-content: center; margin-bottom: 10px;">
+                <!-- Logo dynamically loaded -->
+            </div>
+            <h2 id="printFullInstName">বাইতুল মামুর জামে মসজিদ</h2>
+            <p id="printFullInstAddress">স্থাপিত: ১৯৯৫ খ্রি. | গ্রাম: মধ্যপাড়া, ডাকঘর: বাজারপাড়া</p>
+            <hr style="border: 0.5px solid #000; margin-top: 5px; margin-bottom: 5px;">
+        </div>
+        
+        <h3 style="text-align: center; margin: 15px 0; font-size: 18px; text-decoration: underline; font-weight: bold;">
+            প্রতিষ্ঠানের পূর্ণাঙ্গ আয়-ব্যয় বিবরণী
+        </h3>
+        
+        <div style="margin-bottom: 20px; font-size: 13px; line-height: 1.8; border: 1px solid #000; padding: 10px; border-radius: 8px; display: flex; justify-content: space-between;">
+            <div><strong>বিবরণীর মাস:</strong> <span id="printFullInstMonth"></span></div>
+            <div><strong>রিপোর্ট প্রকাশের তারিখ:</strong> <span id="printFullInstToday"></span></div>
+        </div>
+
+        <!-- Summary boxes inside printed PDF -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px;">
+            <div style="border: 1px solid #000; padding: 10px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; font-weight: bold; color: #555;">মোট আয় (ইজাসহ)</div>
+                <div id="printFullInstTotalIncome" style="font-size: 16px; font-weight: bold; color: green; margin-top: 3px;">৳ ০.০০</div>
+            </div>
+            <div style="border: 1px solid #000; padding: 10px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; font-weight: bold; color: #555;">মোট ব্যয়</div>
+                <div id="printFullInstTotalExpense" style="font-size: 16px; font-weight: bold; color: red; margin-top: 3px;">৳ ০.০০</div>
+            </div>
+            <div style="border: 1px solid #000; padding: 10px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; font-weight: bold; color: #555;">নিট উদ্বৃত্ত (বর্তমান জের)</div>
+                <div id="printFullInstNetBalance" style="font-size: 16px; font-weight: bold; margin-top: 3px;">৳ ০.০০</div>
+            </div>
+        </div>
+        
+        <table id="printableFullInstReportTable" style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 40px; table-layout: fixed;">
+            <thead>
+                <tr>
+                    <th colspan="3" style="border: 1.5px solid #000 !important; background-color: #f2f2f2 !important; text-align: center; font-weight: bold; font-size: 12px !important; padding: 6px !important;">আয় (Income)</th>
+                    <th colspan="3" style="border: 1.5px solid #000 !important; background-color: #f2f2f2 !important; text-align: center; font-weight: bold; font-size: 12px !important; padding: 6px !important;">ব্যয় (Expense)</th>
+                </tr>
+                <tr style="background-color: #fafafa;">
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: left; width: 12%;">তারিখ</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: left; width: 23%;">আয়ের বিবরণ</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: right; width: 15%;">পরিমাণ (৳)</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: left; width: 12%;">তারিখ</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: left; width: 23%;">ব্যয়ের বিবরণ</th>
+                    <th style="border: 1px solid #000 !important; padding: 6px; text-align: right; width: 15%;">পরিমাণ (৳)</th>
+                </tr>
+            </thead>
+            <tbody id="printFullInstTableBody">
+                <!-- Loaded dynamically side-by-side -->
+            </tbody>
+            <tfoot>
+                <tr style="font-weight: bold; background-color: #f2f2f2;">
+                    <td colspan="2" style="border: 1px solid #000 !important; padding: 6px !important; font-size: 11px !important;">সর্বমোট আয়ের পরিমাণ</td>
+                    <td id="printFullInstFooterTotalIncome" style="border: 1px solid #000 !important; padding: 6px !important; font-size: 11px !important; text-align: right;">৳ ০.০০</td>
+                    <td colspan="2" style="border: 1px solid #000 !important; padding: 6px !important; font-size: 11px !important;">মোট ব্যয়ের পরিমাণ</td>
+                    <td id="printFullInstFooterTotalExpense" style="border: 1px solid #000 !important; padding: 6px !important; font-size: 11px !important; text-align: right;">৳ ০.০০</td>
+                </tr>
+            </tfoot>
+        </table>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 80px; padding: 0 30px; font-size: 13px;">
+            <div style="text-align: center; border-top: 1px dashed #000; width: 140px; padding-top: 5px;">ক্যাশিয়ার</div>
+            <div style="text-align: center; border-top: 1px dashed #000; width: 140px; padding-top: 5px;">সাধারণ সম্পাদক</div>
+            <div style="text-align: center; border-top: 1px dashed #000; width: 140px; padding-top: 5px;">সভাপতি</div>
+        </div>
+    </div>
+    
+    <div id="printableKhataArea" class="print-only">
+        <!-- Khata pages will be injected here via JavaScript -->
+    </div>
+
+    <!-- ================== FORGOT PASSWORD MODAL ================== -->
+    <div id="forgot-password-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)" style="z-index: 100000; position: fixed !important;">
+        <div class="modal-content" style="max-width: 400px; padding: 25px; border-radius: 16px; position: relative;">
+            <span class="close-btn" onclick="closeModal('forgot-password-modal')" style="position: absolute; right: 15px; top: 15px; font-size: 20px; cursor: pointer; color: var(--text-muted);">&times;</span>
+            
+            <h3 style="text-align: center; margin-bottom: 20px; font-size: 18px; font-weight: bold; color: var(--primary-color);">
+                <i class="fa-solid fa-shield-halved"></i> পাসওয়ার্ড পুনরুদ্ধার
+            </h3>
+            
+            <!-- Step 1: Verification Form -->
+            <form id="fpVerifyForm" onsubmit="handleFPVerifySubmit(event)">
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-size: 11px; font-weight: 600; margin-bottom: 5px; display: block;">ব্যবহারকারীর পদবী/রোল *</label>
+                    <select id="fpRole" class="form-control" required style="font-size: 12px; padding: 8px;">
+                        <option value="admin">এডমিন (Admin)</option>
+                        <option value="secretary">সাধারণ সম্পাদক (Secretary)</option>
+                        <option value="cashier">ক্যাশিয়ার (Cashier)</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-size: 11px; font-weight: 600; margin-bottom: 5px; display: block;">নিবন্ধিত মোবাইল নম্বর *</label>
+                    <input type="text" id="fpPhone" class="form-control" placeholder="যেমন: 01711XXXXXX" required style="font-size: 12px; padding: 8px;">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 12px; padding: 10px;">
+                    <i class="fa-solid fa-paper-plane"></i> ওটিপি (OTP) কোড পাঠান
+                </button>
+            </form>
+            
+            <!-- Step 2: OTP Verification (Hidden by default) -->
+            <form id="fpOtpForm" onsubmit="handleFPOtpSubmit(event)" style="display: none;">
+                <p style="font-size: 11px; color: var(--text-muted); line-height: 1.6; margin-bottom: 15px; text-align: center; background: #e8f5e9; border: 1px solid #c8e6c9; padding: 8px; border-radius: 8px;">
+                    <i class="fa-solid fa-circle-check" style="color: #2e7d32;"></i> আপনার মোবাইল নম্বরে ৪ ডিজিটের একটি ওটিপি কোড পাঠানো হয়েছে। পরীক্ষার জন্য স্ক্রিনের ওপর নোটিফিকেশনে কোডটি দেখুন।
+                </p>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-size: 11px; font-weight: 600; margin-bottom: 5px; display: block;">৪ ডিজিটের ওটিপি লিখুন *</label>
+                    <input type="text" id="fpOtpCode" class="form-control" placeholder="XXXX" required style="text-align: center; font-size: 18px; letter-spacing: 5px; padding: 8px;" maxlength="4">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 12px; padding: 10px; background-color: var(--secondary-color); border-color: var(--secondary-color);">
+                    <i class="fa-solid fa-circle-check"></i> ওটিপি যাচাই করুন
+                </button>
+            </form>
+            
+            <!-- Step 3: Reset Password (Hidden by default) -->
+            <form id="fpResetForm" onsubmit="handleFPResetSubmit(event)" style="display: none;">
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-size: 11px; font-weight: 600; margin-bottom: 5px; display: block;">নতুন পাসওয়ার্ড *</label>
+                    <input type="password" id="fpNewPassword" class="form-control" placeholder="ন্যূনতম ৪ ডিজিট" required minlength="4" style="font-size: 12px; padding: 8px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-size: 11px; font-weight: 600; margin-bottom: 5px; display: block;">নতুন পাসওয়ার্ড নিশ্চিত করুন *</label>
+                    <input type="password" id="fpConfirmPassword" class="form-control" placeholder="পুনরায় লিখুন" required minlength="4" style="font-size: 12px; padding: 8px;">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 12px; padding: 10px; background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-color) 100%);">
+                    <i class="fa-solid fa-key"></i> পাসওয়ার্ড রিসেট করুন
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- html2pdf Library for Mobile PDF Download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Main JavaScript App -->
+    <script src="app.js?v=2026.08.02.2"></script>
+    <script type="module" src="firebase-db.js?v=2"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(registration => {
+                    console.log('SW registered: ', registration);
+                }).catch(registrationError => {
+                    console.log('SW registration failed: ', registrationError);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
