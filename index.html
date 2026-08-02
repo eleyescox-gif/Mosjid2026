@@ -416,6 +416,29 @@
                     </div>
                 </div>
 
+                <!-- ADMIN ONLY: Aday Khata Section -->
+                <div id="adminAdayKhataSection" class="chart-card" style="margin-bottom: 20px; display: none;">
+                    <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>আদায় খাতা (এডমিন প্যানেল)</span>
+                        <i class="fa-solid fa-book-open" style="color: var(--primary-color);"></i>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">
+                            প্রতিটি সদস্যের পরিশোধিত, বকেয়া ও অগ্রিম তথ্যসহ পূর্ণাঙ্গ ১-পেজ আদায় বহি (আদায় খাতা) জেনারেট ও প্রিন্ট করুন।
+                        </p>
+                        <label style="font-size: 12px; font-weight: 600; margin-bottom: 6px; display: block;">খাতার বছর নির্বাচন করুন</label>
+                        <select id="adayKhataYearSelect" class="form-control" style="margin-bottom: 12px;">
+                            <option value="2025">২০২৫</option>
+                            <option value="2026" selected>২০২৬</option>
+                            <option value="2027">২০২৭</option>
+                            <option value="2028">২০২৮</option>
+                        </select>
+                        <button class="btn btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 42px;" onclick="generateAllMembersKhata()">
+                            <i class="fa-solid fa-print"></i> আদায় খাতা জেনারেট করুন
+                        </button>
+                    </div>
+                </div>
+
                 <!-- ADMIN ONLY: Committee Management Section -->
                 <div id="adminCommitteeSection" class="chart-card" style="margin-bottom: 20px; display: none;">
                     <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
@@ -1075,7 +1098,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Main JavaScript App -->
-    <script src="app.js?v=2026.08.02.5"></script>
+    <script src="app.js?v=2026.08.02.6"></script>
     <script type="module" src="firebase-db.js?v=2"></script>
     <script>
         if ('serviceWorker' in navigator) {

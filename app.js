@@ -569,6 +569,7 @@ function applyRolePermissions() {
     const commSection = document.getElementById('adminCommitteeSection');
     const binSection = document.getElementById('adminRecycleBinSection');
     const bulkImportSec = document.getElementById('adminBulkImportSection');
+    const adayKhataSec = document.getElementById('adminAdayKhataSection');
 
     // Default states (Closed/Hidden for general safety)
     navTx.style.display = 'none';
@@ -584,6 +585,7 @@ function applyRolePermissions() {
     commSection.style.display = 'none';
     if (binSection) binSection.style.display = 'none';
     if (bulkImportSec) bulkImportSec.style.display = 'none';
+    if (adayKhataSec) adayKhataSec.style.display = 'none';
 
     document.getElementById('mdEditBtn').style.display = 'none';
     document.getElementById('mdDeleteBtn').style.display = 'none';
@@ -598,6 +600,7 @@ function applyRolePermissions() {
         commSection.style.display = 'block'; // Admin can manage committee members
         if (binSection) binSection.style.display = 'block'; // Admin sees recycle bin
         if (bulkImportSec) bulkImportSec.style.display = 'block'; // Admin sees bulk import section
+        if (adayKhataSec) adayKhataSec.style.display = 'block'; // Admin sees Aday Khata section
         document.getElementById('mdEditBtn').style.display = 'flex';
         document.getElementById('mdDeleteBtn').style.display = 'flex';
         document.getElementById('mTypeGroup').style.display = 'block';
@@ -3543,30 +3546,76 @@ function handleArrearsAdjustmentSubmit(e) {
 // ==========================================
 // Khata Make (Ledger Printing) Functions
 // ==========================================
+function numberToBanglaWords(amount) {
+    amount = Math.floor(parseFloat(amount) || 0);
+    if (amount <= 0) return 'শূন্য টাকা মাত্র';
+
+    const banglaNums = {
+        0: '', 1: 'এক', 2: 'দুই', 3: 'তিন', 4: 'চার', 5: 'পাঁচ', 6: 'ছয়', 7: 'সাত', 8: 'আট', 9: 'নয়', 10: 'দশ',
+        11: 'এগারো', 12: 'বারো', 13: 'তেরো', 14: 'চৌদ্দ', 15: 'পনেরো', 16: 'ষোলো', 17: 'সতেরো', 18: 'আঠারো', 19: 'উনিশ', 20: 'বিশ',
+        21: 'একুশ', 22: 'বাইশ', 23: 'তেইশ', 24: 'চব্বিশ', 25: 'পঁচিশ', 26: 'ছাব্বিশ', 27: 'সাতাশ', 28: 'আটাশ', 29: '২৯',
+        30: 'ত্রিশ', 31: 'একত্রিশ', 32: 'বত্রিশ', 33: 'তেত্রিশ', 34: 'চৌত্রিশ', 35: 'পঁয়ত্রিশ', 36: 'ছত্রিশ', 37: 'সাইত্রিশ', 38: 'আটত্রিশ', 39: '৩৯',
+        40: 'চল্লিশ', 41: 'একচল্লিশ', 42: 'বিয়াল্লিশ', 43: 'তেতাল্লিশ', 44: 'চৌয়াল্লিশ', 45: 'পয়তাল্লিশ', 46: 'ছেচল্লিশ', 47: 'সাতচল্লিশ', 48: 'আটচল্লিশ', 49: '৪৯',
+        50: 'পঞ্চাশ', 51: 'একান্ন', 52: 'বায়ান্ন', 53: 'তিপ্পান্ন', 54: 'চৌয়ান্ন', 55: 'পঞ্চান্ন', 56: 'ছাপ্পান্ন', 57: 'সাতান্ন', 58: 'আটান্ন', 59: '৫৯',
+        60: 'ষাট', 61: 'একষট্টি', 62: 'বাষট্টি', 63: 'তেষট্টি', 64: 'চৌষট্টি', 65: 'পঁয়ষট্টি', 66: 'ছেষট্টি', 67: 'সাতষট্টি', 68: 'আটষট্টি', 69: '৬৯',
+        70: 'সত্তর', 71: 'একাত্তর', 72: 'বাহাত্তর', 73: 'তিয়াত্তর', 74: 'চৌহাত্তর', 75: 'পঁচাত্তর', 76: 'ছিয়াত্তর', 77: 'সাতাত্তর', 78: 'আটাত্তর', 79: '৭৯',
+        80: 'আশি', 81: 'একাশি', 82: 'বিরাশি', 83: 'তিরাশি', 84: 'চৌরাশি', 85: 'পঁচাশি', 86: 'ছিয়াশি', 87: 'সাতাশি', 88: 'আটাশি', 89: '৮৯',
+        90: 'নব্বই', 91: 'একানব্বই', 92: 'বিয়ানব্বই', 93: 'তিরানব্বই', 94: 'চৌরানব্বই', 95: 'পঁচানব্বই', 96: 'ছিয়ানব্বই', 97: 'সাতানব্বই', 98: 'আটানব্বই', 99: 'নিরানব্বই'
+    };
+
+    function convertGroup(n) {
+        if (n <= 0) return '';
+        return banglaNums[n] || n.toString();
+    }
+
+    let words = '';
+    let crore = Math.floor(amount / 10000000);
+    amount %= 10000000;
+    let lakh = Math.floor(amount / 100000);
+    amount %= 100000;
+    let thousand = Math.floor(amount / 1000);
+    amount %= 1000;
+    let hundred = Math.floor(amount / 100);
+    amount %= 100;
+
+    if (crore > 0) words += convertGroup(crore) + ' কোটি ';
+    if (lakh > 0) words += convertGroup(lakh) + ' লাখ ';
+    if (thousand > 0) words += convertGroup(thousand) + ' হাজার ';
+    if (hundred > 0) words += convertGroup(hundred) + ' শত ';
+    if (amount > 0) words += convertGroup(amount) + ' ';
+
+    return words.trim() + ' টাকা মাত্র';
+}
+
 function generateAllMembersKhata() {
-    const yearSelect = document.getElementById('khataMakeYear');
-    const year = yearSelect ? yearSelect.value : new Date().getFullYear();
+    const yearSelectAdmin = document.getElementById('adayKhataYearSelect');
+    const yearSelectMake = document.getElementById('khataMakeYear');
+    let selectedYear = new Date().getFullYear();
+    if (yearSelectAdmin && yearSelectAdmin.value) {
+        selectedYear = parseInt(yearSelectAdmin.value);
+    } else if (yearSelectMake && yearSelectMake.value) {
+        selectedYear = parseInt(yearSelectMake.value);
+    }
     
     // Filter active members only
-    const activeMembers = state.members.filter(m => m.status === 'active');
+    const activeMembers = state.members.filter(m => m.status !== 'Pending' && !m.delete_requested && !m.is_deleted);
     
     if (activeMembers.length === 0) {
         alert("কোনো সক্রিয় সদস্য পাওয়া যায়নি।");
         return;
     }
     
-    // Sort members numerically by ID if possible, else alphabetically
+    // Sort members numerically by realIndex/ID
     activeMembers.sort((a, b) => {
-        const numA = parseInt(a.id.replace('member-', '')) || 0;
-        const numB = parseInt(b.id.replace('member-', '')) || 0;
-        return numA - numB;
+        const indexA = state.members.findIndex(m => m.id === a.id);
+        const indexB = state.members.findIndex(m => m.id === b.id);
+        return indexA - indexB;
     });
 
     const khataContainer = document.getElementById('printableKhataArea');
     if (!khataContainer) return;
     
     let htmlContent = '';
-    
     const months = ['জানুয়ারি', 'ফেব্রুয়ারী', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
     
     activeMembers.forEach(member => {
@@ -3574,63 +3623,118 @@ function generateAllMembersKhata() {
         const memberNum = englishToBanglaNum(String(realIndex).padStart(2, '0'));
         
         let tableRows = '';
-        months.forEach(month => {
+        let totalMonthlyFeeSum = 0;
+        let totalClaimSum = 0;
+        let totalPaidSum = 0;
+        let totalRemainingDueSum = 0;
+
+        // Opening arrears computation prior to selectedYear
+        let runningArrear = parseFloat(member.opening_arrears || 0);
+        const joinParts = (member.join_date || '2025-01-01').split('-');
+        const joinYear = parseInt(joinParts[0]) || 2025;
+        const joinMonth = parseInt(joinParts[1]) || 1;
+
+        if (joinYear < selectedYear) {
+            for (let y = joinYear; y < selectedYear; y++) {
+                const sM = y === joinYear ? joinMonth : 1;
+                for (let m = sM; m <= 12; m++) {
+                    const sub = state.subscriptions.find(s => s.member_id === member.id && s.year === y && s.month === m);
+                    const fee = member.member_type === 'Free' ? 0 : (parseFloat(member.monthly_fee) || 0);
+                    const paid = sub ? parseFloat(sub.amount_paid || 0) : 0;
+                    runningArrear = (runningArrear + fee) - paid;
+                    if (runningArrear < 0) runningArrear = 0;
+                }
+            }
+        }
+
+        let initialBokiaForYear = runningArrear;
+
+        months.forEach((monthName, index) => {
+            const mNum = index + 1;
+            const sub = state.subscriptions.find(s => s.member_id === member.id && s.year === selectedYear && s.month === mNum);
+            
+            let monthlyFee = member.member_type === 'Free' ? 0 : (parseFloat(member.monthly_fee) || 0);
+            let currentMonthBokia = runningArrear;
+            let totalClaim = currentMonthBokia + monthlyFee;
+            let paid = sub ? parseFloat(sub.amount_paid || 0) : 0;
+            let remainingDue = totalClaim - paid;
+            if (remainingDue < 0) remainingDue = 0;
+
+            runningArrear = remainingDue;
+
+            let receiptNo = sub && sub.receipt_no ? englishToBanglaNum(sub.receipt_no.toString()) : '';
+            if (!receiptNo && sub && sub.status === 'Paid') receiptNo = '—';
+
+            let collector = sub && sub.collector ? sub.collector : '';
+            if (!collector && sub && sub.last_payment_date) {
+                const matchingTx = state.transactions.find(t => t.member_id === member.id && t.date === sub.last_payment_date);
+                if (matchingTx) collector = matchingTx.created_by || matchingTx.collected_by || '';
+            }
+
+            totalMonthlyFeeSum += monthlyFee;
+            totalClaimSum += totalClaim;
+            totalPaidSum += paid;
+            totalRemainingDueSum = remainingDue;
+
             tableRows += `
                 <tr>
-                    <td style="text-align: left; font-weight: bold;">${month}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
+                    <td style="text-align: left; font-weight: bold;">${monthName}</td>
+                    <td>${currentMonthBokia > 0 ? englishToBanglaNum(currentMonthBokia.toFixed(0)) : ''}</td>
+                    <td>${monthlyFee > 0 ? englishToBanglaNum(monthlyFee.toFixed(0)) : ''}</td>
+                    <td>${totalClaim > 0 ? englishToBanglaNum(totalClaim.toFixed(0)) : ''}</td>
+                    <td>${receiptNo}</td>
+                    <td>${paid > 0 ? englishToBanglaNum(paid.toFixed(0)) : ''}</td>
+                    <td>${remainingDue > 0 ? englishToBanglaNum(remainingDue.toFixed(0)) : ''}</td>
+                    <td>${collector}</td>
                 </tr>
             `;
         });
         
         // Total row
         tableRows += `
-            <tr style="font-weight: bold;">
+            <tr style="font-weight: bold; background-color: #f9f9f9;">
                 <td style="text-align: left;">সর্ব মোট</td>
+                <td>${initialBokiaForYear > 0 ? englishToBanglaNum(initialBokiaForYear.toFixed(0)) : ''}</td>
+                <td>${totalMonthlyFeeSum > 0 ? englishToBanglaNum(totalMonthlyFeeSum.toFixed(0)) : ''}</td>
+                <td>${totalClaimSum > 0 ? englishToBanglaNum(totalClaimSum.toFixed(0)) : ''}</td>
                 <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
+                <td>${totalPaidSum > 0 ? englishToBanglaNum(totalPaidSum.toFixed(0)) : ''}</td>
+                <td>${totalRemainingDueSum > 0 ? englishToBanglaNum(totalRemainingDueSum.toFixed(0)) : ''}</td>
                 <td></td>
             </tr>
         `;
         
+        const paidWords = totalPaidSum > 0 ? numberToBanglaWords(totalPaidSum) : '....................................................................................';
+
         const memberHtml = `
             <div class="khata-page">
-                <div class="khata-header">
-                    <!-- Mosque logo (if available in settings, or default icon) -->
-                    <img src="${state.settings.logoData || 'icons/mosque_icon_192.png'}" alt="Logo">
-                    <div class="khata-title">
-                        <h2>${state.settings.mosqueName}</h2>
-                        <p>${state.settings.address}</p>
-                        <h3>মাসিক চাঁদা আদায় বহি</h3>
-                        <p style="font-size: 14px; font-weight: bold; margin-top: 5px;">বছর: ${englishToBanglaNum(year.toString())} খ্রি:</p>
+                <div class="khata-header" style="position: relative; margin-bottom: 20px;">
+                    <img src="${state.settings.logoData || 'icons/mosque_icon_192.png'}" alt="Logo" style="position: absolute; left: 0; top: 0; width: 65px; height: 65px; object-fit: contain;">
+                    <div class="khata-title" style="text-align: center;">
+                        <h2 style="font-size: 20px; margin: 0 0 4px 0; font-weight: bold;">${state.settings.mosqueName}</h2>
+                        <p style="font-size: 13px; margin: 0 0 4px 0; color: #333;">${state.settings.address}</p>
+                        <h3 style="font-size: 16px; margin: 0 0 4px 0; font-weight: bold;">মাসিক চাঁদা আদায় বহি</h3>
+                        <p style="font-size: 14px; font-weight: bold; margin: 0;">বছর: ${englishToBanglaNum(selectedYear.toString())} খ্রি:</p>
+                    </div>
+                    <div style="position: absolute; right: 0; top: 0; font-weight: bold; font-size: 14px;">
+                        ক্রমিক নং: ${memberNum}
                     </div>
                 </div>
                 
-                <div class="khata-top-info">
-                    <div>নাম: <span style="font-weight: normal; margin-left: 10px; border-bottom: 1px dashed #000; padding-bottom: 2px;">${member.name}</span></div>
-                    <div>মোবাইল: <span style="font-weight: normal; margin-left: 10px; border-bottom: 1px dashed #000; padding-bottom: 2px;">${member.phone || 'দেওয়া নেই'}</span></div>
-                    <div>ক্রমিক নং: <span style="font-weight: normal; margin-left: 10px; border-bottom: 1px dashed #000; padding-bottom: 2px;">${memberNum}</span></div>
+                <div class="khata-top-info" style="display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: bold; font-size: 14px;">
+                    <div>নাম: <span style="font-weight: normal; margin-left: 5px;">«${member.name}»</span></div>
+                    <div>মোবাইল: <span style="font-weight: normal; margin-left: 5px;">${member.phone ? englishToBanglaNum(member.phone) : '—'}</span></div>
                 </div>
                 
                 <table>
                     <thead>
                         <tr>
                             <th style="width: 15%;">মাস</th>
-                            <th style="width: 12%;">বকেয়া</th>
+                            <th style="width: 11%;">বকেয়া</th>
                             <th style="width: 13%;">মাসিক চাঁদা</th>
                             <th style="width: 12%;">মোট দাবী</th>
-                            <th style="width: 12%;">রশিদ নম্বর</th>
-                            <th style="width: 12%;">মোট আদায়</th>
+                            <th style="width: 13%;">রশিদ নম্বর</th>
+                            <th style="width: 12%;">মোট আদায়</th>
                             <th style="width: 12%;">মোট বাকী</th>
                             <th style="width: 12%;">আদায়কারী</th>
                         </tr>
@@ -3640,15 +3744,15 @@ function generateAllMembersKhata() {
                     </tbody>
                 </table>
                 
-                <div class="khata-footer">
-                    উক্ত সদস্য থেকে ............................. সালে সর্ব মোট ................................... টাকা গ্রহণ করা হয়েছে।<br>
-                    কথায়: ................................................................................................................................................
+                <div class="khata-footer" style="margin-top: 25px; font-size: 14px; line-height: 2.0;">
+                    উক্ত সদস্য থেকে ${englishToBanglaNum(selectedYear.toString())} সালে সর্ব মোট ${totalPaidSum > 0 ? englishToBanglaNum(totalPaidSum.toFixed(0)) : '...................'} টাকা গ্রহণ করা হয়েছে।<br>
+                    কথায়: ${paidWords}
                 </div>
                 
-                <div class="khata-signatures">
-                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 150px; text-align: center;">কোষাধ্যক্ষ</div>
-                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 150px; text-align: center;">সাধারণ সম্পাদক</div>
-                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 150px; text-align: center;">সভাপতি</div>
+                <div class="khata-signatures" style="display: flex; justify-content: space-between; margin-top: 45px; font-weight: bold; font-size: 14px;">
+                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 140px; text-align: center;">কোষাধ্যক্ষ</div>
+                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 140px; text-align: center;">সাধারণ সম্পাদক</div>
+                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 140px; text-align: center;">সভাপতি</div>
                 </div>
             </div>
         `;
@@ -3658,7 +3762,7 @@ function generateAllMembersKhata() {
     
     khataContainer.innerHTML = htmlContent;
     
-    // Trigger the print dialog specifically for the khata area
-    triggerPrint('printableKhataArea', 'Members_Khata_' + year, 'print-active-khata');
+    // Trigger print
+    triggerPrint('printableKhataArea', 'Aday_Khata_' + selectedYear, 'print-active-khata');
 }
 
