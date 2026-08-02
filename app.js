@@ -1407,7 +1407,7 @@ function renderMembersList() {
                 <div class="member-avatar">${firstChar}</div>
                 <div>
                     <div class="member-name" style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
-                        <span style="font-size: 11px; background-color: var(--primary-light); color: var(--primary-dark); padding: 2px 6px; border-radius: 10px; font-weight: bold; border: 1px solid var(--primary-color);">সদস্য নং - ${displayNumBN}</span>
+                        <span style="font-size: 11px; background-color: var(--primary-light); color: var(--primary-dark); padding: 2px 6px; border-radius: 10px; font-weight: bold; border: 1px solid var(--primary-color);">সদস্য নং- ${displayNum}</span>
                         ${m.name}
                         ${advanceAmount > 0 ? `<span style="font-size: 10px; background-color: var(--success-color); color: white; padding: 2px 6px; border-radius: 10px; font-weight: normal;">অগ্রিম: ৳ ${englishToBanglaNum(advanceAmount.toFixed(0))}</span>` : ''}
                     </div>
