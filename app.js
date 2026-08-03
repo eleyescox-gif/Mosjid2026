@@ -1433,20 +1433,20 @@ function renderMembersList() {
 
         item.innerHTML = `
             <div class="member-info">
-                <div class="member-avatar">${firstChar}</div>
+                <div class="member-avatar" style="font-size: 14px; font-weight: bold; background-color: var(--primary-light); color: var(--primary-dark); border: 2.5px solid var(--primary-color); display: flex; align-items: center; justify-content: center;">${displayNum}</div>
                 <div>
-                    <div class="member-name" style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+                    <div class="member-name" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                         <span style="font-size: 11px; background-color: var(--primary-light); color: var(--primary-dark); padding: 2px 6px; border-radius: 10px; font-weight: bold; border: 1px solid var(--primary-color);">সদস্য নং- ${displayNum}</span>
-                        ${m.name}
+                        <strong style="color: var(--text-main); font-size: 14px;">${m.name}</strong>
+                        <a href="tel:${(m.phone || '').replace(/[^0-9]/g, '')}" class="quick-call-icon-btn" onclick="event.stopPropagation()" title="কল করুন" style="display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background-color: #e8f5e9; border: 1px solid #81c784; text-decoration: none; transition: transform 0.15s ease;">
+                            <i class="fa-solid fa-phone-flip" style="color: #2e7d32; font-size: 11px;"></i>
+                        </a>
                         ${advanceAmount > 0 ? `<span style="font-size: 10px; background-color: var(--success-color); color: white; padding: 2px 6px; border-radius: 10px; font-weight: normal;">অগ্রিম: ৳ ${englishToBanglaNum(advanceAmount.toFixed(0))}</span>` : ''}
                     </div>
-                    <div class="member-phone" style="margin: 4px 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                        <a href="tel:${(m.phone || '').replace(/[^0-9]/g, '')}" class="quick-call-btn" onclick="event.stopPropagation()" style="display: inline-flex; align-items: center; gap: 4px; background-color: var(--primary-light); color: var(--primary-dark); padding: 3px 8px; border-radius: 6px; font-weight: 600; font-size: 11px; text-decoration: none; border: 1px solid var(--primary-color);">
-                            <i class="fa-solid fa-phone-flip" style="color: var(--primary-color);"></i> ${englishToBanglaNum(m.phone)}
-                        </a>
-                        <a href="https://wa.me/88${(m.phone || '').replace(/[^0-9]/g, '')}" target="_blank" class="quick-wa-btn" onclick="event.stopPropagation()" style="display: inline-flex; align-items: center; gap: 4px; background-color: #e6f8ee; color: #075e54; padding: 3px 8px; border-radius: 6px; font-weight: 600; font-size: 11px; text-decoration: none; border: 1px solid #25d366;">
-                            <i class="fa-brands fa-whatsapp" style="color: #25d366; font-size: 12px;"></i> হোয়াটসঅ্যাপ
-                        </a>
+                    <div class="member-phone" style="margin: 4px 0;">
+                        <span style="font-size: 12px; color: var(--text-muted); font-weight: 500;">
+                            <i class="fa-solid fa-mobile-screen-button"></i> ${englishToBanglaNum(m.phone || 'মোবাইল নেই')}
+                        </span>
                     </div>
                     <span class="member-type-badge ${badgeClass}">${badgeLabel} - ৳ ${englishToBanglaNum(m.monthly_fee.toString())}</span>
                     ${m.status === 'Suspended' ? '<span class="member-type-badge" style="background-color: #fd7e14; color: #fff; margin-left: 4px;">স্থগিত</span>' : ''}
@@ -1638,10 +1638,7 @@ function openMemberDetails(memberId) {
     document.getElementById('mdModalPhone').innerHTML = `
         <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap;">
             <a href="tel:${cleanPhone}" style="display: inline-flex; align-items: center; gap: 5px; color: var(--primary-color); font-weight: bold; text-decoration: none; background: var(--primary-light); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--primary-color); font-size: 12px;">
-                <i class="fa-solid fa-phone-flip"></i> ${englishToBanglaNum(member.phone)}
-            </a>
-            <a href="https://wa.me/88${cleanPhone}" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; color: #075e54; font-weight: bold; text-decoration: none; background: #e6f8ee; padding: 4px 10px; border-radius: 6px; border: 1px solid #25d366; font-size: 12px;">
-                <i class="fa-brands fa-whatsapp" style="color: #25d366;"></i> হোয়াটসঅ্যাপ
+                <i class="fa-solid fa-phone-flip"></i> ${englishToBanglaNum(member.phone)} (কল করুন)
             </a>
         </div>
     `;
@@ -3804,6 +3801,7 @@ function generateAllMembersKhata() {
     khataContainer.innerHTML = htmlContent;
     
     // Trigger print
+    document.body.classList.add('print-active-khata');
     triggerPrint('printableKhataArea', 'Aday_Khata_' + selectedYear, 'print-active-khata');
 }
 
