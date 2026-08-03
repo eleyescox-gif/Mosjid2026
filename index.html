@@ -11,7 +11,7 @@
     <meta name="theme-color" content="#2e7d32">
     <!-- FontAwesome for Premium Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=8">
+    <link rel="stylesheet" href="style.css?v=11">
     <!-- SheetJS for Excel Import -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -186,11 +186,17 @@
                 </div>
 
                 <div class="filter-bar">
-                    <div class="filter-chip active" onclick="setMemberFilter('all', this)">সকল সদস্য (<span id="countAll">0</span>)</div>
-                    <div class="filter-chip" onclick="setMemberFilter('due', this)">বকেয়া আছে (<span id="countDue">0</span>)</div>
-                    <div class="filter-chip" onclick="setMemberFilter('General', this)">সাধারণ (<span id="countGeneral">0</span>)</div>
+                    <div class="filter-chip active" onclick="setMemberFilter('all', this)">সদস্যগণ (<span id="countAll">0</span>)</div>
+                    <div class="filter-chip" onclick="setMemberFilter('due', this)">বকেয়া (<span id="countDue">0</span>)</div>
                     <div class="filter-chip" onclick="setMemberFilter('Poor', this)">দরিদ্র (<span id="countPoor">0</span>)</div>
                     <div class="filter-chip" onclick="setMemberFilter('Free', this)">ফ্রি (<span id="countFree">0</span>)</div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0 15px 0;">
+                    <span style="font-size: 12px; font-weight: bold; color: var(--text-muted);"><i class="fa-solid fa-filter"></i> ফিল্টারকৃত তালিকা</span>
+                    <button class="btn btn-outline" onclick="printAllMembersList()" style="width: auto; height: 32px; font-size: 11px; padding: 0 12px; margin: 0; display: flex; align-items: center; gap: 6px; border: 1.5px solid var(--primary-color); color: var(--primary-color); background: white; border-radius: 8px; font-weight: bold; cursor: pointer; transition: all 0.2s;">
+                        <i class="fa-solid fa-print"></i> তালিকা প্রিন্ট করুন (A4)
+                    </button>
                 </div>
 
                 <!-- Total Outstanding Arrears Card -->
@@ -1054,6 +1060,10 @@
         <!-- Khata pages will be injected here via JavaScript -->
     </div>
 
+    <div id="printableAllMembersArea" class="print-only">
+        <!-- Members print table will be injected here via JavaScript -->
+    </div>
+
     <!-- ================== FORGOT PASSWORD MODAL ================== -->
     <div id="forgot-password-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)" style="z-index: 100000;">
         <div class="modal-content" style="max-width: 400px; padding: 25px; border-radius: 16px; position: relative;">
@@ -1118,7 +1128,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Main JavaScript App -->
-    <script src="app.js?v=2026.08.03.7"></script>
+    <script src="app.js?v=2026.08.03.10"></script>
     <script type="module" src="firebase-db.js?v=2"></script>
     <script>
         if ('serviceWorker' in navigator) {

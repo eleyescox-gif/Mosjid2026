@@ -132,18 +132,13 @@ body {
 
 /* Header */
 .app-header {
-    background: linear-gradient(135deg, #042416 0%, #0a4027 50%, #06301d 100%);
-    background-image: 
-        radial-gradient(circle at 10% 20%, rgba(255, 215, 0, 0.08) 0%, transparent 40%),
-        radial-gradient(circle at 90% 80%, rgba(255, 215, 0, 0.08) 0%, transparent 40%),
-        repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0, rgba(255,255,255,0.02) 10px, transparent 10px, transparent 20px),
-        linear-gradient(135deg, #042416 0%, #0c4a2d 50%, #06301d 100%);
+    background: linear-gradient(135deg, #0b4528 0%, #062b19 100%);
     color: white;
-    padding: 16px 20px 20px 20px;
-    border-bottom-left-radius: 24px;
-    border-bottom-right-radius: 24px;
-    border-bottom: 3.5px solid #ffc107;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35), 0 0 15px rgba(255, 193, 7, 0.25);
+    padding: 18px 20px;
+    border-bottom-left-radius: 20px;
+    border-bottom-right-radius: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
     position: relative;
     z-index: 10;
 }
@@ -152,26 +147,24 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 5px;
 }
 
 .mosque-title {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
 }
 
 .header-logo-style {
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 215, 0, 0.2) 0%, rgba(4, 36, 22, 0.95) 100%);
-    border: 2.5px solid #ffc107;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1.5px solid rgba(255, 255, 255, 0.25);
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    box-shadow: 0 0 12px rgba(255, 193, 7, 0.4), inset 0 0 8px rgba(255, 215, 0, 0.3);
     flex-shrink: 0;
 }
 
@@ -182,28 +175,25 @@ body {
 }
 
 .header-logo-style i {
-    font-size: 24px;
-    color: #ffc107;
-    filter: drop-shadow(0 2px 6px rgba(255, 193, 7, 0.8));
+    font-size: 22px;
+    color: #ffffff;
 }
 
 .mosque-title h1 {
-    font-size: 19px;
+    font-size: 18px;
     font-weight: 700;
-    letter-spacing: 0.3px;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    letter-spacing: 0.2px;
     color: #ffffff;
     margin: 0;
 }
 
 .subtitle {
-    font-size: 12px;
-    color: #ffd54f !important;
-    font-weight: 700;
-    letter-spacing: 0.5px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-weight: 500;
+    letter-spacing: 0.3px;
     display: inline-block;
-    margin-top: 3px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    margin-top: 2px;
 }
 
 .header-actions {
@@ -213,43 +203,43 @@ body {
 }
 
 .logout-btn {
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     border-radius: 50% !important;
-    background: radial-gradient(circle at 30% 30%, #0d5434, #042416) !important;
-    border: 3px solid #063d24 !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2), 0 0 10px rgba(0, 0, 0, 0.3) !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     padding: 0 !important;
     position: relative;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: all 0.2s ease;
 }
 
 .logout-btn::before {
     content: '';
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    background: linear-gradient(145deg, #f0f0f0 0%, #b8b8b8 50%, #7a7a7a 100%);
-    box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.9), inset 0 -2px 4px rgba(0, 0, 0, 0.6), 0 2px 5px rgba(0,0,0,0.5);
+    background: linear-gradient(145deg, #ffffff 0%, #e0e0e0 100%);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     position: absolute;
 }
 
 .logout-btn i {
-    font-size: 15px;
-    color: #163625 !important;
+    font-size: 14px;
+    color: #0b4528 !important;
     z-index: 2;
     position: relative;
     font-weight: 900;
-    filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.6));
 }
 
 .logout-btn:hover {
-    transform: scale(1.06);
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.3), 0 0 12px rgba(255, 193, 7, 0.4) !important;
+    transform: scale(1.05);
+    background: rgba(255, 255, 255, 0.25) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 
 
@@ -879,34 +869,51 @@ textarea.form-control {
 }
 
 .filter-bar {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 10px;
-    margin-bottom: 15px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 12px;
 }
 
 .filter-bar::-webkit-scrollbar {
-    height: 0px;
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 .filter-chip {
-    padding: 6px 14px;
+    padding: 6px 2px;
     border-radius: 20px;
-    background: white;
-    border: 1px solid var(--border-color);
-    color: var(--text-muted);
-    font-size: 12px;
-    font-weight: 500;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 700;
     white-space: nowrap;
     cursor: pointer;
-    transition: all 0.2s;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.filter-chip:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
 }
 
 .filter-chip.active {
-    background: var(--primary-color);
-    color: white;
-    border-color: var(--primary-color);
+    background: linear-gradient(135deg, #052a1b 0%, #0d5434 100%);
+    color: #ffffff;
+    border-color: #052a1b;
+    box-shadow: 0 2px 6px rgba(13, 84, 52, 0.3);
 }
 
 /* Reports Styles */
@@ -1286,7 +1293,8 @@ textarea.form-control {
     body.print-active-inst #printableInstitutionReceiptArea,
     body.print-active-arrears #printableArrearsListArea,
     body.print-active-full #printableFullInstitutionReceiptArea,
-    body.print-active-khata #printableKhataArea {
+    body.print-active-khata #printableKhataArea,
+    body.print-active-memberslist #printableAllMembersArea {
         display: block !important;
     }
 

@@ -174,8 +174,8 @@ document.addEventListener("DOMContentLoaded", () => {
         commPhotoInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
-                if (file.size > 300000) { // Limit to 300KB
-                    alert("ছবির সাইজ ৩০০KB এর নিচে হতে হবে!");
+                if (file.size > 204800) { // Limit to 200KB (200 * 1024)
+                    alert("ছবির সাইজ সর্বোচ্চ ২০০ কেবি (200 KB) হতে পারবে!");
                     e.target.value = '';
                     document.getElementById('commPhotoPreview').style.display = 'none';
                     return;
@@ -1373,11 +1373,11 @@ function renderMembersList() {
         return true;
     });
 
-    document.getElementById('countAll').innerText = englishToBanglaNum(approvedActiveMembers.length.toString());
-    document.getElementById('countDue').innerText = englishToBanglaNum(totalDueCount.toString());
-    document.getElementById('countGeneral').innerText = englishToBanglaNum(totalGeneral.toString());
-    document.getElementById('countPoor').innerText = englishToBanglaNum(totalPoor.toString());
-    document.getElementById('countFree').innerText = englishToBanglaNum(totalFree.toString());
+    if (document.getElementById('countAll')) document.getElementById('countAll').innerText = englishToBanglaNum(approvedActiveMembers.length.toString());
+    if (document.getElementById('countDue')) document.getElementById('countDue').innerText = englishToBanglaNum(totalDueCount.toString());
+    if (document.getElementById('countGeneral')) document.getElementById('countGeneral').innerText = englishToBanglaNum(totalGeneral.toString());
+    if (document.getElementById('countPoor')) document.getElementById('countPoor').innerText = englishToBanglaNum(totalPoor.toString());
+    if (document.getElementById('countFree')) document.getElementById('countFree').innerText = englishToBanglaNum(totalFree.toString());
 
     // Calculate total outstanding dues of all active members
     let totalDuesSum = 0;
@@ -1436,20 +1436,16 @@ function renderMembersList() {
                 <div class="member-avatar" style="font-size: 14px; font-weight: bold; background-color: var(--primary-light); color: var(--primary-dark); border: 2.5px solid var(--primary-color); display: flex; align-items: center; justify-content: center;">${displayNum}</div>
                 <div>
                     <div class="member-name" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                        <span style="font-size: 11px; background-color: var(--primary-light); color: var(--primary-dark); padding: 2px 6px; border-radius: 10px; font-weight: bold; border: 1px solid var(--primary-color);">সদস্য নং- ${displayNum}</span>
-                        <strong style="color: var(--text-main); font-size: 14px;">${m.name}</strong>
+                        <strong style="color: var(--text-main); font-size: 15px;">${m.name}</strong>
                         <a href="tel:${(m.phone || '').replace(/[^0-9]/g, '')}" class="quick-call-icon-btn" onclick="event.stopPropagation()" title="কল করুন" style="display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background-color: #e8f5e9; border: 1px solid #81c784; text-decoration: none; transition: transform 0.15s ease;">
                             <i class="fa-solid fa-phone-flip" style="color: #2e7d32; font-size: 11px;"></i>
                         </a>
                         ${advanceAmount > 0 ? `<span style="font-size: 10px; background-color: var(--success-color); color: white; padding: 2px 6px; border-radius: 10px; font-weight: normal;">অগ্রিম: ৳ ${englishToBanglaNum(advanceAmount.toFixed(0))}</span>` : ''}
                     </div>
-                    <div class="member-phone" style="margin: 4px 0;">
-                        <span style="font-size: 12px; color: var(--text-muted); font-weight: 500;">
-                            <i class="fa-solid fa-mobile-screen-button"></i> ${englishToBanglaNum(m.phone || 'মোবাইল নেই')}
-                        </span>
+                    <div style="margin-top: 4px;">
+                        <span class="member-type-badge ${badgeClass}">${badgeLabel} - ৳ ${englishToBanglaNum(m.monthly_fee.toString())}</span>
+                        ${m.status === 'Suspended' ? '<span class="member-type-badge" style="background-color: #fd7e14; color: #fff; margin-left: 4px;">স্থগিত</span>' : ''}
                     </div>
-                    <span class="member-type-badge ${badgeClass}">${badgeLabel} - ৳ ${englishToBanglaNum(m.monthly_fee.toString())}</span>
-                    ${m.status === 'Suspended' ? '<span class="member-type-badge" style="background-color: #fd7e14; color: #fff; margin-left: 4px;">স্থগিত</span>' : ''}
                 </div>
             </div>
             <div class="member-due-status">
@@ -2605,8 +2601,8 @@ function handleAddCommitteeSubmit(e) {
     try {
         e.preventDefault();
         
-        if (!state.currentUser || (state.currentUser.role !== 'admin' && state.currentUser.role !== 'secretary')) {
-            alert("শুধুমাত্র সাধারণ সম্পাদক ও এডমিন পরিচালনা কমিটির তথ্য আপডেট করতে পারবেন!");
+        if (!state.currentUser || (state.currentUser.role !== 'admin' && state.currentUser.role !== 'secretary' && state.currentUser.role !== 'cashier')) {
+            alert("শুধুমাত্র এডমিন, সম্পাদক ও ক্যাশিয়ার পরিচালনা কমিটির তথ্য আপডেট করতে পারবেন!");
             return;
         }
 
@@ -2748,8 +2744,8 @@ function cancelCommitteeEdit() {
 // Delete Committee Member (Admin & Secretary Only)
 function deleteCommitteeMember(id) {
     const role = state.currentUser.role;
-    if (role !== 'admin' && role !== 'secretary') {
-        alert("শুধুমাত্র সাধারণ সম্পাদক ও এডমিন পরিচালনা কমিটি থেকে বাদ দিতে পারবেন!");
+    if (role !== 'admin' && role !== 'secretary' && role !== 'cashier') {
+        alert("শুধুমাত্র এডমিন, সম্পাদক ও ক্যাশিয়ার পরিচালনা কমিটি থেকে বাদ দিতে পারবেন!");
         return;
     }
     if (!confirm("আপনি কি নিশ্চিতভাবে এই সদস্যকে পরিচালনা কমিটি থেকে বাদ দিতে চান?")) return;
@@ -3803,6 +3799,130 @@ function generateAllMembersKhata() {
     // Trigger print
     document.body.classList.add('print-active-khata');
     triggerPrint('printableKhataArea', 'Aday_Khata_' + selectedYear, 'print-active-khata');
+}
+
+// ==========================================
+// Print Filtered Member List (A4 Layout)
+// ==========================================
+function printAllMembersList() {
+    const searchVal = document.getElementById('memberSearchInput').value.toLowerCase();
+    
+    const approvedActiveMembers = state.members.filter(m => {
+        if (!m) return false;
+        const st = (m.status || '').toLowerCase();
+        return (st === 'active' || st === 'suspended' || st === '') && !m.delete_requested && !m.is_deleted;
+    });
+
+    const filteredMembers = approvedActiveMembers.filter(m => {
+        const memberDue = calculateMemberTotalDue(m.id);
+        const realIndex = state.members.findIndex(member => member.id === m.id) + 1;
+        const displayNum = String(realIndex).padStart(2, '0');
+        const displayNumBN = englishToBanglaNum(displayNum);
+        
+        const matchesSearch = m.name.toLowerCase().includes(searchVal) || 
+                              (m.phone && m.phone.includes(searchVal)) ||
+                              displayNum.includes(searchVal) ||
+                              displayNumBN.includes(searchVal) ||
+                              m.id.includes(searchVal);
+                              
+        if (!matchesSearch) return false;
+
+        if (state.memberFilter === 'due') return memberDue > 0;
+        if (state.memberFilter !== 'all' && m.member_type !== state.memberFilter) return false;
+
+        return true;
+    });
+
+    if (filteredMembers.length === 0) {
+        alert("প্রিন্ট করার জন্য কোনো সদস্য পাওয়া যায়নি!");
+        return;
+    }
+
+    // Sort by real Index
+    filteredMembers.sort((a, b) => {
+        const indexA = state.members.findIndex(m => m.id === a.id);
+        const indexB = state.members.findIndex(m => m.id === b.id);
+        return indexA - indexB;
+    });
+
+    const printContainer = document.getElementById('printableAllMembersArea');
+    if (!printContainer) return;
+
+    let filterText = 'সকল সদস্য';
+    if (state.memberFilter === 'due') filterText = 'বকেয়া সদস্য';
+    else if (state.memberFilter === 'General') filterText = 'সাধারণ সদস্য';
+    else if (state.memberFilter === 'Poor') filterText = 'দরিদ্র সদস্য';
+    else if (state.memberFilter === 'Free') filterText = 'ফ্রি সদস্য';
+
+    let tableRows = '';
+    let totalDues = 0;
+
+    filteredMembers.forEach((m, idx) => {
+        const realIndex = state.members.findIndex(member => member.id === m.id) + 1;
+        const displayNum = String(realIndex).padStart(2, '0');
+        const dueAmount = calculateMemberTotalDue(m.id);
+        totalDues += dueAmount;
+
+        let typeLabel = 'সাধারণ';
+        if (m.member_type === 'Poor') typeLabel = 'দরিদ্র';
+        else if (m.member_type === 'Free') typeLabel = 'ফ্রি';
+
+        tableRows += `
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 10px; text-align: center; font-size: 13px; border: 1px solid #000;">${englishToBanglaNum(displayNum)}</td>
+                <td style="padding: 10px; font-size: 13px; font-weight: bold; border: 1px solid #000;">${m.name}</td>
+                <td style="padding: 10px; text-align: center; font-size: 13px; border: 1px solid #000;">${typeLabel}</td>
+                <td style="padding: 10px; text-align: center; font-size: 13px; border: 1px solid #000;">${englishToBanglaNum(m.phone || '—')}</td>
+                <td style="padding: 10px; text-align: right; font-size: 13px; font-weight: bold; border: 1px solid #000; color: ${dueAmount > 0 ? '#b02a37' : '#0f5132'};">
+                    ৳ ${englishToBanglaNum(dueAmount.toString())}
+                </td>
+            </tr>
+        `;
+    });
+
+    const printDate = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    printContainer.innerHTML = `
+        <div style="padding: 30px; font-family: 'Inter', 'Hind Siliguri', sans-serif;">
+            <div class="print-pad-header" style="text-align: center; margin-bottom: 30px;">
+                <h2 style="font-size: 26px; color: #0f5132; margin: 0 0 5px 0; font-weight: bold;">${state.settings.mosqueName || 'বাইতুল মামুর মসজিদ'}</h2>
+                <p style="font-size: 13px; color: #666; margin: 0 0 5px 0;">${state.settings.mosqueAddress || 'প্রতিষ্ঠানের ঠিকানা'}</p>
+                <div style="height: 2px; background: #0f5132; margin: 15px auto; width: 60%;"></div>
+                <h3 style="font-size: 18px; font-weight: bold; margin: 5px 0;">সদস্য তালিকা (${filterText})</h3>
+                <p style="font-size: 12px; color: #777;">প্রিন্ট তারিখ: ${printDate}</p>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; border: 1.5px solid #000;">
+                <thead>
+                    <tr style="background-color: #f2f2f2; border-bottom: 2px solid #000;">
+                        <th style="padding: 12px 10px; font-size: 13px; border: 1px solid #000; width: 12%;">সদস্য নং</th>
+                        <th style="padding: 12px 10px; font-size: 13px; border: 1px solid #000; text-align: left;">সদস্যের নাম</th>
+                        <th style="padding: 12px 10px; font-size: 13px; border: 1px solid #000; width: 15%;">ক্যাটাগরি</th>
+                        <th style="padding: 12px 10px; font-size: 13px; border: 1px solid #000; width: 22%;">মোবাইল নম্বর</th>
+                        <th style="padding: 12px 10px; font-size: 13px; border: 1px solid #000; width: 20%; text-align: right;">বকেয়া চাঁদা</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                    <tr style="background-color: #f8f9fa; font-weight: bold; border-top: 2px solid #000;">
+                        <td colspan="4" style="padding: 12px 10px; text-align: right; font-size: 13px; border: 1px solid #000;">সর্বমোট বকেয়া পরিমাণ:</td>
+                        <td style="padding: 12px 10px; text-align: right; font-size: 14px; border: 1px solid #000; color: #b02a37;">
+                            ৳ ${englishToBanglaNum(totalDues.toString())}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 80px; padding: 0 20px; font-size: 13px; font-weight: bold;">
+                <div style="text-align: center; border-top: 1px dashed #000; width: 150px; padding-top: 6px;">কোষাধ্যক্ষ</div>
+                <div style="text-align: center; border-top: 1px dashed #000; width: 150px; padding-top: 6px;">সাধারণ সম্পাদক</div>
+                <div style="text-align: center; border-top: 1px dashed #000; width: 150px; padding-top: 6px;">সভাপতি</div>
+            </div>
+        </div>
+    `;
+
+    document.body.classList.add('print-active-memberslist');
+    triggerPrint('printableAllMembersArea', 'Members_List', 'print-active-memberslist');
 }
 
 // ==========================================
