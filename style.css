@@ -58,24 +58,92 @@ body {
     overflow: hidden;
 }
 
-@media (min-width: 451px) {
+/* Smartphone Mock Bezel Wrapper styling */
+.phone-frame {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+@media (min-width: 481px) {
+    body {
+        background: radial-gradient(circle at 50% 50%, #f8fafc 0%, #e2e8f0 100%) !important;
+        padding: 30px 0 !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        min-height: 100vh !important;
+        overflow-y: auto !important;
+    }
+    
+    .phone-frame {
+        width: 420px;
+        height: 860px;
+        background-color: #1e252b; /* Premium dark navy/charcoal bezel */
+        border-radius: 48px;
+        box-shadow: 
+            0 25px 60px -15px rgba(0, 0, 0, 0.45),
+            0 15px 30px -10px rgba(0, 0, 0, 0.3),
+            inset 0 3px 5px rgba(255, 255, 255, 0.15),
+            inset 0 -3px 5px rgba(0, 0, 0, 0.5);
+        padding: 12px; /* Thick bezel border matching user image */
+        position: relative;
+        overflow: hidden;
+        margin: auto;
+    }
+    
+    /* Device top notch / Dynamic Island */
+    .phone-frame::after {
+        content: '';
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 110px;
+        height: 22px;
+        background-color: #0b0e11;
+        border-radius: 20px;
+        z-index: 1000000;
+        box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1);
+    }
+
     .app-container {
-        height: 850px;
-        border-radius: 30px;
-        border: 8px solid #2d3748;
-        margin: auto; /* Center vertically on desktop */
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 100% !important;
+        border-radius: 36px !important;
+        border: none !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+    }
+    
+    /* Force overlays to constrain inside the phone screen boundary */
+    .login-overlay, .modal-overlay {
+        position: absolute !important;
+        width: 100% !important;
+        height: 100% !important;
+        top: 0 !important;
+        left: 0 !important;
+        border-radius: 36px !important;
+        z-index: 99999 !important;
     }
 }
 
 /* Header */
 .app-header {
-    background: linear-gradient(135deg, #052618 0%, #0c4d30 100%);
+    background: linear-gradient(135deg, #042416 0%, #0a4027 50%, #06301d 100%);
+    background-image: 
+        radial-gradient(circle at 10% 20%, rgba(255, 215, 0, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(255, 215, 0, 0.08) 0%, transparent 40%),
+        repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0, rgba(255,255,255,0.02) 10px, transparent 10px, transparent 20px),
+        linear-gradient(135deg, #042416 0%, #0c4a2d 50%, #06301d 100%);
     color: white;
-    padding: 20px 20px 24px 20px;
+    padding: 16px 20px 20px 20px;
     border-bottom-left-radius: 24px;
     border-bottom-right-radius: 24px;
-    border-bottom: 3px solid var(--accent-color);
-    box-shadow: var(--shadow-lg), 0 10px 20px rgba(15, 81, 50, 0.18), 0 0 15px rgba(255, 193, 7, 0.12);
+    border-bottom: 3.5px solid #ffc107;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35), 0 0 15px rgba(255, 193, 7, 0.25);
     position: relative;
     z-index: 10;
 }
@@ -90,20 +158,21 @@ body {
 .mosque-title {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
 }
 
 .header-logo-style {
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
-    border: 2px solid rgba(255, 193, 7, 0.4);
+    background: radial-gradient(circle, rgba(255, 215, 0, 0.2) 0%, rgba(4, 36, 22, 0.95) 100%);
+    border: 2.5px solid #ffc107;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    box-shadow: 0 0 8px rgba(255, 193, 7, 0.2);
+    box-shadow: 0 0 12px rgba(255, 193, 7, 0.4), inset 0 0 8px rgba(255, 215, 0, 0.3);
+    flex-shrink: 0;
 }
 
 .header-logo-style img {
@@ -113,55 +182,76 @@ body {
 }
 
 .header-logo-style i {
-    font-size: 20px;
-    color: var(--accent-color);
-    filter: drop-shadow(0 0 5px rgba(255, 193, 7, 0.5));
+    font-size: 24px;
+    color: #ffc107;
+    filter: drop-shadow(0 2px 6px rgba(255, 193, 7, 0.8));
 }
 
 .mosque-title h1 {
-    font-size: 17px;
+    font-size: 19px;
     font-weight: 700;
     letter-spacing: 0.3px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
     color: #ffffff;
+    margin: 0;
 }
 
 .subtitle {
-    font-size: 11px;
-    color: #ffe082 !important; /* Premium soft golden theme for badge labels */
-    font-weight: 600;
+    font-size: 12px;
+    color: #ffd54f !important;
+    font-weight: 700;
     letter-spacing: 0.5px;
     display: inline-block;
-    margin-top: 2px;
+    margin-top: 3px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .header-actions {
     display: flex;
     gap: 12px;
+    align-items: center;
 }
 
 .logout-btn {
-    background: rgba(255, 255, 255, 0.12) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    color: rgba(255, 255, 255, 0.85) !important;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    border-radius: 50% !important;
+    background: radial-gradient(circle at 30% 30%, #0d5434, #042416) !important;
+    border: 3px solid #063d24 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2), 0 0 10px rgba(0, 0, 0, 0.3) !important;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
     cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0 !important;
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.logout-btn:hover, .logout-btn:active {
-    background: rgba(220, 53, 69, 0.25) !important;
-    border-color: rgba(220, 53, 69, 0.45) !important;
-    color: #ff8a8a !important;
-    box-shadow: 0 0 10px rgba(220, 53, 69, 0.2);
-    transform: scale(0.95);
+.logout-btn::before {
+    content: '';
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #f0f0f0 0%, #b8b8b8 50%, #7a7a7a 100%);
+    box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.9), inset 0 -2px 4px rgba(0, 0, 0, 0.6), 0 2px 5px rgba(0,0,0,0.5);
+    position: absolute;
 }
+
+.logout-btn i {
+    font-size: 15px;
+    color: #163625 !important;
+    z-index: 2;
+    position: relative;
+    font-weight: 900;
+    filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.6));
+}
+
+.logout-btn:hover {
+    transform: scale(1.06);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.3), 0 0 12px rgba(255, 193, 7, 0.4) !important;
+}
+
 
 .icon-btn {
     background: rgba(255, 255, 255, 0.15);

@@ -79,6 +79,10 @@ window.syncStateFromCloud = function(cloudState) {
     
     // Update local state arrays safely
     state.members = ensureArray(cloudState.members);
+    if (state.members.length === 0) {
+        initializeMockData();
+        return;
+    }
     state.transactions = ensureArray(cloudState.transactions);
     state.subscriptions = ensureArray(cloudState.subscriptions);
     state.committee = ensureArray(cloudState.committee);
@@ -363,21 +367,32 @@ function loadState() {
     const localSubscriptions = localStorage.getItem('mosque_subscriptions');
 
     if (localMembers) {
-        state.members = JSON.parse(localMembers);
-    } else {
-        state.members = [];
+        try {
+            state.members = JSON.parse(localMembers);
+        } catch (e) {
+            state.members = [];
+        }
     }
 
-    if (localTransactions) {
-        state.transactions = JSON.parse(localTransactions);
+    if (!state.members || state.members.length === 0) {
+        initializeMockData();
     } else {
-        state.transactions = [];
-    }
+        state.members.forEach(m => {
+            if (!m.member_type) m.member_type = 'General';
+            if (!m.status) m.status = 'Active';
+            if (m.monthly_fee === undefined || m.monthly_fee === null) m.monthly_fee = 150;
+        });
+        if (localTransactions) {
+            try { state.transactions = JSON.parse(localTransactions); } catch (e) { state.transactions = []; }
+        } else {
+            state.transactions = [];
+        }
 
-    if (localSubscriptions) {
-        state.subscriptions = JSON.parse(localSubscriptions);
-    } else {
-        state.subscriptions = [];
+        if (localSubscriptions) {
+            try { state.subscriptions = JSON.parse(localSubscriptions); } catch (e) { state.subscriptions = []; }
+        } else {
+            state.subscriptions = [];
+        }
     }
     
     const banner = document.getElementById('demoBanner');
@@ -570,6 +585,7 @@ function applyRolePermissions() {
     const binSection = document.getElementById('adminRecycleBinSection');
     const bulkImportSec = document.getElementById('adminBulkImportSection');
     const adayKhataSec = document.getElementById('adminAdayKhataSection');
+    const exportSec = document.getElementById('adminExportSection');
 
     // Default states (Closed/Hidden for general safety)
     navTx.style.display = 'none';
@@ -586,6 +602,7 @@ function applyRolePermissions() {
     if (binSection) binSection.style.display = 'none';
     if (bulkImportSec) bulkImportSec.style.display = 'none';
     if (adayKhataSec) adayKhataSec.style.display = 'none';
+    if (exportSec) exportSec.style.display = 'none';
 
     document.getElementById('mdEditBtn').style.display = 'none';
     document.getElementById('mdDeleteBtn').style.display = 'none';
@@ -601,6 +618,7 @@ function applyRolePermissions() {
         if (binSection) binSection.style.display = 'block'; // Admin sees recycle bin
         if (bulkImportSec) bulkImportSec.style.display = 'block'; // Admin sees bulk import section
         if (adayKhataSec) adayKhataSec.style.display = 'block'; // Admin sees Aday Khata section
+        if (exportSec) exportSec.style.display = 'block'; // Admin sees Excel export section
         document.getElementById('mdEditBtn').style.display = 'flex';
         document.getElementById('mdDeleteBtn').style.display = 'flex';
         document.getElementById('mTypeGroup').style.display = 'block';
@@ -1323,7 +1341,11 @@ function renderMembersList() {
     let totalFree = 0;
     let totalDueCount = 0;
 
-    const approvedActiveMembers = state.members.filter(m => m.status === 'Active' || m.status === 'Suspended');
+    const approvedActiveMembers = state.members.filter(m => {
+        if (!m) return false;
+        const st = (m.status || '').toLowerCase();
+        return (st === 'active' || st === 'suspended' || st === '') && !m.delete_requested && !m.is_deleted;
+    });
 
     const filteredMembers = approvedActiveMembers.filter(m => {
         if (m.member_type === 'General') totalGeneral++;
@@ -1378,7 +1400,11 @@ function renderMembersList() {
         
         item.onclick = () => openMemberDetails(m.id);
 
-        const firstChar = m.name.trim().charAt(0);
+        const realIndex = state.members.findIndex(member => member.id === m.id) + 1;
+        const displayNum = String(realIndex).padStart(2, '0');
+        const displayNumBN = englishToBanglaNum(displayNum);
+
+        const firstChar = (m.name || 'স').trim().charAt(0);
         const dueAmount = calculateMemberTotalDue(m.id);
         const advanceAmount = parseFloat(m.advance_balance || 0);
         const hasDue = dueAmount > 0;
@@ -1414,8 +1440,13 @@ function renderMembersList() {
                         ${m.name}
                         ${advanceAmount > 0 ? `<span style="font-size: 10px; background-color: var(--success-color); color: white; padding: 2px 6px; border-radius: 10px; font-weight: normal;">অগ্রিম: ৳ ${englishToBanglaNum(advanceAmount.toFixed(0))}</span>` : ''}
                     </div>
-                    <div class="member-phone">
-                        <i class="fa-solid fa-phone"></i> ${englishToBanglaNum(m.phone)}
+                    <div class="member-phone" style="margin: 4px 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <a href="tel:${(m.phone || '').replace(/[^0-9]/g, '')}" class="quick-call-btn" onclick="event.stopPropagation()" style="display: inline-flex; align-items: center; gap: 4px; background-color: var(--primary-light); color: var(--primary-dark); padding: 3px 8px; border-radius: 6px; font-weight: 600; font-size: 11px; text-decoration: none; border: 1px solid var(--primary-color);">
+                            <i class="fa-solid fa-phone-flip" style="color: var(--primary-color);"></i> ${englishToBanglaNum(m.phone)}
+                        </a>
+                        <a href="https://wa.me/88${(m.phone || '').replace(/[^0-9]/g, '')}" target="_blank" class="quick-wa-btn" onclick="event.stopPropagation()" style="display: inline-flex; align-items: center; gap: 4px; background-color: #e6f8ee; color: #075e54; padding: 3px 8px; border-radius: 6px; font-weight: 600; font-size: 11px; text-decoration: none; border: 1px solid #25d366;">
+                            <i class="fa-brands fa-whatsapp" style="color: #25d366; font-size: 12px;"></i> হোয়াটসঅ্যাপ
+                        </a>
                     </div>
                     <span class="member-type-badge ${badgeClass}">${badgeLabel} - ৳ ${englishToBanglaNum(m.monthly_fee.toString())}</span>
                     ${m.status === 'Suspended' ? '<span class="member-type-badge" style="background-color: #fd7e14; color: #fff; margin-left: 4px;">স্থগিত</span>' : ''}
@@ -1603,8 +1634,17 @@ function openMemberDetails(memberId) {
 
     state.activeMemberId = memberId;
 
-    document.getElementById('mdModalName').innerText = member.name;
-    document.getElementById('mdModalPhone').innerHTML = `<i class="fa-solid fa-phone"></i> ${englishToBanglaNum(member.phone)}`;
+    const cleanPhone = (member.phone || '').replace(/[^0-9]/g, '');
+    document.getElementById('mdModalPhone').innerHTML = `
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap;">
+            <a href="tel:${cleanPhone}" style="display: inline-flex; align-items: center; gap: 5px; color: var(--primary-color); font-weight: bold; text-decoration: none; background: var(--primary-light); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--primary-color); font-size: 12px;">
+                <i class="fa-solid fa-phone-flip"></i> ${englishToBanglaNum(member.phone)}
+            </a>
+            <a href="https://wa.me/88${cleanPhone}" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; color: #075e54; font-weight: bold; text-decoration: none; background: #e6f8ee; padding: 4px 10px; border-radius: 6px; border: 1px solid #25d366; font-size: 12px;">
+                <i class="fa-brands fa-whatsapp" style="color: #25d366;"></i> হোয়াটসঅ্যাপ
+            </a>
+        </div>
+    `;
     document.getElementById('mdModalAddress').innerHTML = `<i class="fa-solid fa-location-dot"></i> ${member.address}`;
     
     let typeClass = 'general';
@@ -3277,6 +3317,7 @@ function handleBulkImport(e) {
                     name: name,
                     phone: mobile,
                     address: 'বাল্ক আপলোড',
+                    member_type: 'General',
                     monthly_fee: defaultMonthlyFee,
                     join_date: joinDate,
                     status: 'Active',
@@ -3722,7 +3763,7 @@ function generateAllMembersKhata() {
                 </div>
                 
                 <div class="khata-top-info" style="display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: bold; font-size: 14px;">
-                    <div>নাম: <span style="font-weight: normal; margin-left: 5px;">«${member.name}»</span></div>
+                    <div>নাম: <span style="font-weight: normal; margin-left: 5px;">${member.name}</span></div>
                     <div>মোবাইল: <span style="font-weight: normal; margin-left: 5px;">${member.phone ? englishToBanglaNum(member.phone) : '—'}</span></div>
                 </div>
                 
@@ -3764,5 +3805,63 @@ function generateAllMembersKhata() {
     
     // Trigger print
     triggerPrint('printableKhataArea', 'Aday_Khata_' + selectedYear, 'print-active-khata');
+}
+
+// ==========================================
+// Excel Export Function for Admin Settings
+// ==========================================
+function exportMembersToExcel() {
+    // Filter active & approved members
+    const approvedActiveMembers = state.members.filter(m => {
+        if (!m) return false;
+        const st = (m.status || '').toLowerCase();
+        return (st === 'active' || st === 'suspended' || st === '') && !m.delete_requested && !m.is_deleted;
+    });
+
+    if (approvedActiveMembers.length === 0) {
+        alert("এক্সপোর্ট করার মতো কোনো সক্রিয় সদস্য পাওয়া যায়নি!");
+        return;
+    }
+
+    // Sort members numerically by realIndex/ID
+    approvedActiveMembers.sort((a, b) => {
+        const indexA = state.members.findIndex(m => m.id === a.id);
+        const indexB = state.members.findIndex(m => m.id === b.id);
+        return indexA - indexB;
+    });
+
+    const exportData = approvedActiveMembers.map(m => {
+        const realIndex = state.members.findIndex(member => member.id === m.id) + 1;
+        const displayNum = String(realIndex).padStart(2, '0');
+        const dueAmount = calculateMemberTotalDue(m.id);
+
+        return {
+            'সদস্য নম্বর': `সদস্য নং- ${displayNum}`,
+            'নাম': m.name || '',
+            'মোবাইল': m.phone || '',
+            'বকেয়া চাঁদা (৳)': dueAmount
+        };
+    });
+
+    if (typeof XLSX === 'undefined') {
+        alert("এক্সেল লাইব্রেরি লোড হয়নি, অনুগ্রহ করে পেজটি রিফ্রেশ করুন।");
+        return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+    // Set column widths for clean readability
+    worksheet['!cols'] = [
+        { wch: 18 }, // সদস্য নম্বর
+        { wch: 28 }, // নাম
+        { wch: 18 }, // মোবাইল
+        { wch: 20 }  // বকেয়া চাঁদা (৳)
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'সদস্য তালিকা');
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `Member_List_${dateStr}.xlsx`);
 }
 
