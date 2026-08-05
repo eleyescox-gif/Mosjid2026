@@ -11,7 +11,7 @@
     <meta name="theme-color" content="#2e7d32">
     <!-- FontAwesome for Premium Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=2026.08.05.8">
+    <link rel="stylesheet" href="style.css?v=2026.08.05.10">
     <!-- SheetJS for Excel Import -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -280,10 +280,12 @@
             <section id="reports-view" class="app-view">
 
                 <!-- Report Type Tabs -->
-                <div style="display: flex; gap: 0; background: #f0f4f0; border-radius: 12px; padding: 4px; margin-bottom: 14px;">
-                    <button id="rpt-tab-monthly" onclick="switchReportTab('monthly')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: var(--primary-color); color: #fff; transition: all .2s;">মাসিক</button>
-                    <button id="rpt-tab-quarterly" onclick="switchReportTab('quarterly')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: transparent; color: #555; transition: all .2s;">ত্রৈমাসিক</button>
-                    <button id="rpt-tab-yearly" onclick="switchReportTab('yearly')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: transparent; color: #555; transition: all .2s;">বার্ষিক</button>
+                <div style="display: flex; gap: 3px; background: #e2ece3; border-radius: 12px; padding: 4px; margin-bottom: 14px; overflow-x: auto; scrollbar-width: none;">
+                    <button id="rpt-tab-monthly" onclick="switchReportTab('monthly')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: var(--primary-color); color: #fff; white-space: nowrap; transition: all .2s;">মাসিক</button>
+                    <button id="rpt-tab-quarterly" onclick="switchReportTab('quarterly')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: transparent; color: #444; white-space: nowrap; transition: all .2s;">ত্রৈমাসিক</button>
+                    <button id="rpt-tab-halfyearly" onclick="switchReportTab('halfyearly')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: transparent; color: #444; white-space: nowrap; transition: all .2s;">ছয় মাসিক</button>
+                    <button id="rpt-tab-yearly" onclick="switchReportTab('yearly')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: transparent; color: #444; white-space: nowrap; transition: all .2s;">বার্ষিক</button>
+                    <button id="rpt-tab-custom" onclick="switchReportTab('custom')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: transparent; color: #444; white-space: nowrap; transition: all .2s;">তারিখ হতে তারিখ</button>
                 </div>
 
                 <!-- Monthly Controls -->
@@ -327,6 +329,20 @@
                     </select>
                 </div>
 
+                <!-- Half-Yearly (6-Month) Controls -->
+                <div id="rpt-controls-halfyearly" style="display: none; gap: 8px; margin-bottom: 12px;">
+                    <select id="reportHalfYear" class="form-control" onchange="loadReports()" style="margin-bottom: 0;">
+                        <option value="1">১ম ষাণ্মাসিক (জানুয়ারি–জুন)</option>
+                        <option value="2">২য় ষাণ্মাসিক (জুলাই–ডিসেম্বর)</option>
+                    </select>
+                    <select id="reportYearH" class="form-control" onchange="loadReports()" style="margin-bottom: 0;">
+                        <option value="2024">২০২৪</option>
+                        <option value="2025">২০২৫</option>
+                        <option value="2026" selected>২০২৬</option>
+                        <option value="2027">২০২৭</option>
+                    </select>
+                </div>
+
                 <!-- Yearly Controls -->
                 <div id="rpt-controls-yearly" style="display: none; margin-bottom: 12px;">
                     <select id="reportYearY" class="form-control" onchange="loadReports()">
@@ -335,6 +351,18 @@
                         <option value="2026" selected>২০২৬</option>
                         <option value="2027">২০২৭</option>
                     </select>
+                </div>
+
+                <!-- Custom Date Range Controls -->
+                <div id="rpt-controls-custom" style="display: none; gap: 8px; margin-bottom: 12px;">
+                    <div style="flex: 1;">
+                        <label style="font-size: 10px; font-weight: bold; color: #555; display: block; margin-bottom: 2px;">শুরু তারিখ:</label>
+                        <input type="date" id="reportCustomStartDate" class="form-control" onchange="loadReports()" style="margin-bottom: 0; font-size: 12px;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="font-size: 10px; font-weight: bold; color: #555; display: block; margin-bottom: 2px;">শেষ তারিখ:</label>
+                        <input type="date" id="reportCustomEndDate" class="form-control" onchange="loadReports()" style="margin-bottom: 0; font-size: 12px;">
+                    </div>
                 </div>
 
                 <!-- Summary Cards -->
@@ -1158,7 +1186,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Main JavaScript App -->
-    <script src="app.js?v=2026.08.05.8"></script>
+    <script src="app.js?v=2026.08.05.10"></script>
     <script type="module" src="firebase-db.js?v=2"></script>
     <script>
         if ('serviceWorker' in navigator) {

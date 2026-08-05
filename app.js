@@ -2113,67 +2113,139 @@ let currentReportTab = 'monthly';
 
 function switchReportTab(tab) {
     currentReportTab = tab;
-    ['monthly','quarterly','yearly'].forEach(t => {
+    ['monthly', 'quarterly', 'halfyearly', 'yearly', 'custom'].forEach(t => {
         const btn = document.getElementById('rpt-tab-' + t);
         const ctrl = document.getElementById('rpt-controls-' + t);
-        if (btn) { btn.style.background = t === tab ? 'var(--primary-color)' : 'transparent'; btn.style.color = t === tab ? '#fff' : '#555'; }
+        if (btn) {
+            btn.style.background = t === tab ? 'var(--primary-color)' : 'transparent';
+            btn.style.color = t === tab ? '#fff' : '#444';
+        }
         if (ctrl) ctrl.style.display = 'none';
     });
+
     const activeCtrl = document.getElementById('rpt-controls-' + tab);
     if (activeCtrl) {
-        if (tab === 'quarterly') { activeCtrl.style.display = 'flex'; activeCtrl.style.flexDirection = 'column'; activeCtrl.style.gap = '8px'; }
-        else activeCtrl.style.display = 'block';
+        if (tab === 'quarterly' || tab === 'halfyearly' || tab === 'custom') {
+            activeCtrl.style.display = 'flex';
+            activeCtrl.style.gap = '8px';
+        } else {
+            activeCtrl.style.display = 'block';
+        }
     }
+
     const btnLabel = document.getElementById('printBtnLabel');
     if (btnLabel) {
-        const labels = { monthly: 'মাসিক বিবরণী প্রিন্ট (A4)', quarterly: 'ত্রৈমাসিক বিবরণী প্রিন্ট (A4)', yearly: 'বার্ষিক বিবরণী প্রিন্ট (A4)' };
-        btnLabel.textContent = labels[tab];
+        const labels = {
+            monthly: 'মাসিক বিবরণী প্রিন্ট (A4)',
+            quarterly: 'ত্রৈমাসিক বিবরণী প্রিন্ট (A4)',
+            halfyearly: 'ছয় মাসিক বিবরণী প্রিন্ট (A4)',
+            yearly: 'বার্ষিক বিবরণী প্রিন্ট (A4)',
+            custom: 'কাস্টম বিবরণী প্রিন্ট (A4)'
+        };
+        btnLabel.textContent = labels[tab] || 'বিবরণী প্রিন্ট (A4)';
     }
+
     loadReports();
 }
 
 function getReportDateRange() {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
     if (currentReportTab === 'monthly') {
-        const m = parseInt(document.getElementById('reportMonth')?.value || (new Date().getMonth()+1));
-        const y = parseInt(document.getElementById('reportYear')?.value || new Date().getFullYear());
-        return { startMonth: m, endMonth: m, year: y };
+        const m = parseInt(document.getElementById('reportMonth')?.value || (today.getMonth() + 1));
+        const y = parseInt(document.getElementById('reportYear')?.value || today.getFullYear());
+        const startStr = `${y}-${String(m).padStart(2, '0')}-01`;
+        const lastDay = new Date(y, m, 0).getDate();
+        const endStr = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        const MN = ['', 'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
+        return { startDate: startStr, endDate: endStr, periodLabel: `${MN[m]} ${englishToBanglaNum(y.toString())} খ্রি:` };
     }
+
     if (currentReportTab === 'quarterly') {
         const q = parseInt(document.getElementById('reportQuarter')?.value || 1);
-        const y = parseInt(document.getElementById('reportYearQ')?.value || new Date().getFullYear());
-        const qMap = { 1:[1,3], 2:[4,6], 3:[7,9], 4:[10,12] };
-        return { startMonth: qMap[q][0], endMonth: qMap[q][1], year: y };
+        const y = parseInt(document.getElementById('reportYearQ')?.value || today.getFullYear());
+        const qMap = { 1: [1, 3], 2: [4, 6], 3: [7, 9], 4: [10, 12] };
+        const qNames = { 1: '১ম ত্রৈমাসিক (জানুয়ারি–মার্চ)', 2: '২য় ত্রৈমাসিক (এপ্রিল–জুন)', 3: '৩য় ত্রৈমাসিক (জুলাই–সেপ্টেম্বর)', 4: '৪র্থ ত্রৈমাসিক (অক্টোবর–ডিসেম্বর)' };
+        const startM = qMap[q][0];
+        const endM = qMap[q][1];
+        const startStr = `${y}-${String(startM).padStart(2, '0')}-01`;
+        const lastDay = new Date(y, endM, 0).getDate();
+        const endStr = `${y}-${String(endM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        return { startDate: startStr, endDate: endStr, periodLabel: `${qNames[q]} — ${englishToBanglaNum(y.toString())} খ্রি:` };
     }
-    const y = parseInt(document.getElementById('reportYearY')?.value || new Date().getFullYear());
-    return { startMonth: 1, endMonth: 12, year: y };
+
+    if (currentReportTab === 'halfyearly') {
+        const h = parseInt(document.getElementById('reportHalfYear')?.value || 1);
+        const y = parseInt(document.getElementById('reportYearH')?.value || today.getFullYear());
+        const startM = h === 1 ? 1 : 7;
+        const endM = h === 1 ? 6 : 12;
+        const hNames = { 1: '১ম ষাণ্মাসিক (জানুয়ারি–জুন)', 2: '২য় ষাণ্মাসিক (জুলাই–ডিসেম্বর)' };
+        const startStr = `${y}-${String(startM).padStart(2, '0')}-01`;
+        const lastDay = new Date(y, endM, 0).getDate();
+        const endStr = `${y}-${String(endM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        return { startDate: startStr, endDate: endStr, periodLabel: `${hNames[h]} — ${englishToBanglaNum(y.toString())} খ্রি:` };
+    }
+
+    if (currentReportTab === 'yearly') {
+        const y = parseInt(document.getElementById('reportYearY')?.value || today.getFullYear());
+        return { startDate: `${y}-01-01`, endDate: `${y}-12-31`, periodLabel: `বার্ষিক বিবরণী — ${englishToBanglaNum(y.toString())} খ্রি:` };
+    }
+
+    if (currentReportTab === 'custom') {
+        let s = document.getElementById('reportCustomStartDate')?.value;
+        let e = document.getElementById('reportCustomEndDate')?.value;
+        if (!s) s = `${today.getFullYear()}-01-01`;
+        if (!e) e = todayStr;
+        const sBN = englishToBanglaNum(s);
+        const eBN = englishToBanglaNum(e);
+        return { startDate: s, endDate: e, periodLabel: `তারিখ: ${sBN} হতে ${eBN}` };
+    }
+
+    return { startDate: `${today.getFullYear()}-01-01`, endDate: todayStr, periodLabel: 'সময়কালের বিবরণী' };
 }
 
 // Reports Loader
 function loadReports() {
-    const { startMonth, endMonth, year } = getReportDateRange();
+    const { startDate, endDate } = getReportDateRange();
     let totalInc = 0, totalExp = 0;
     let bankBal = parseFloat(state.settings.initial_bank_balance || 0);
     const breakdown = {};
+    let totalSamajChanda = 0;
 
     state.transactions.forEach(tx => {
-        const parts = tx.date.split('-');
-        const y = parseInt(parts[0]);
-        const m = parseInt(parts[1]);
-        const val = parseFloat(tx.amount);
-
-        const pm = (tx.payment_method || '').toUpperCase();
+        const txDate = tx.date;
+        const val = parseFloat(tx.amount || 0);
+        const pm = (tx.payment_mode || tx.payment_method || '').toUpperCase();
         if (pm === 'BANK') bankBal += tx.transaction_type === 'INCOME' ? val : -val;
 
-        const inPeriod = y === year && m >= startMonth && m <= endMonth;
+        const inPeriod = (txDate >= startDate && txDate <= endDate);
         if (!inPeriod) return;
 
-        if (tx.transaction_type === 'INCOME') totalInc += val;
-        else if (tx.transaction_type === 'EXPENSE') totalExp += val;
-
-        const key = tx.category || 'other';
-        if (!breakdown[key]) breakdown[key] = { amount: 0, type: tx.transaction_type };
-        breakdown[key].amount += val;
+        if (tx.transaction_type === 'INCOME') {
+            totalInc += val;
+            const isMemberChanda = (tx.member_id && state.members.some(m => m.id === tx.member_id)) || 
+                                   tx.category === 'সদস্য চাঁদা' || 
+                                   tx.category === 'মাসিক চাঁদা' || 
+                                   tx.is_member_fee;
+            if (isMemberChanda) {
+                totalSamajChanda += val;
+            } else {
+                const key = tx.category || 'other';
+                if (!breakdown[key]) breakdown[key] = { amount: 0, type: 'INCOME' };
+                breakdown[key].amount += val;
+            }
+        } else if (tx.transaction_type === 'EXPENSE') {
+            totalExp += val;
+            const key = tx.category || 'other';
+            if (!breakdown[key]) breakdown[key] = { amount: 0, type: 'EXPENSE' };
+            breakdown[key].amount += val;
+        }
     });
+
+    if (totalSamajChanda > 0) {
+        breakdown['সমাজ চাঁদা (সকল সদস্য)'] = { amount: totalSamajChanda, type: 'INCOME' };
+    }
 
     const net = totalInc - totalExp;
     document.getElementById('reportTotalIncome').innerText = formatCurrency(totalInc);
@@ -2181,7 +2253,10 @@ function loadReports() {
     const bankEl = document.getElementById('reportBankBalance');
     if (bankEl) bankEl.innerText = formatCurrency(Math.max(0, bankBal));
     const netEl = document.getElementById('reportNetBalance');
-    if (netEl) { netEl.innerText = (net >= 0 ? '+' : '-') + 'টাকা ' + formatCurrency(Math.abs(net)); netEl.style.color = net >= 0 ? '#4a148c' : '#b71c1c'; }
+    if (netEl) { 
+        netEl.innerText = (net >= 0 ? '+' : '-') + 'টাকা ' + formatCurrency(Math.abs(net)); 
+        netEl.style.color = net >= 0 ? '#4a148c' : '#b71c1c'; 
+    }
 
     const incList = document.getElementById('categoryBreakdownIncomeList');
     const expList = document.getElementById('categoryBreakdownExpenseList');
@@ -2202,42 +2277,72 @@ function loadReports() {
 }
 
 function generateAdvancedPrintReport() {
-    const { startMonth, endMonth, year } = getReportDateRange();
-    const MN = ['','জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
-    const QN = {1:'১ম ত্রৈমাসিক (জানুয়ারি–মার্চ)',2:'২য় ত্রৈমাসিক (এপ্রিল–জুন)',3:'৩য় ত্রৈমাসিক (জুলাই–সেপ্টেম্বর)',4:'৪র্থ ত্রৈমাসিক (অক্টোবর–ডিসেম্বর)'};
-    let periodLabel = '';
-    if (currentReportTab === 'monthly') periodLabel = MN[startMonth] + ' ' + englishToBanglaNum(year.toString()) + ' খ্রি:';
-    else if (currentReportTab === 'quarterly') { const q = parseInt(document.getElementById('reportQuarter')?.value||1); periodLabel = QN[q] + ' — ' + englishToBanglaNum(year.toString()) + ' খ্রি:'; }
-    else periodLabel = 'বার্ষিক বিবরণী — ' + englishToBanglaNum(year.toString()) + ' খ্রি:';
+    const { startDate, endDate, periodLabel } = getReportDateRange();
 
     let totalInc = 0, totalExp = 0, prevInc = 0, prevExp = 0;
     let bankBal = parseFloat(state.settings.initial_bank_balance || 0);
     let cashBal = parseFloat(state.settings.initial_cash_balance || 0);
-    const incList = [], expList = [];
+    let totalSamajChanda = 0;
+    const rawIncList = [];
+    const expList = [];
 
     state.transactions.forEach(tx => {
-        const parts = tx.date.split('-');
-        const y = parseInt(parts[0]), m = parseInt(parts[1]);
-        const val = parseFloat(tx.amount);
-        const pm = (tx.payment_method || '').toUpperCase();
-        const inPeriod = y === year && m >= startMonth && m <= endMonth;
-        const before = y < year || (y === year && m < startMonth);
+        const txDate = tx.date;
+        const val = parseFloat(tx.amount || 0);
+        const pm = (tx.payment_mode || tx.payment_method || '').toUpperCase();
+        
+        const inPeriod = (txDate >= startDate && txDate <= endDate);
+        const before = (txDate < startDate);
 
         if (pm === 'BANK') bankBal += tx.transaction_type === 'INCOME' ? val : -val;
         else cashBal += tx.transaction_type === 'INCOME' ? val : -val;
 
-        if (before) { if (tx.transaction_type === 'INCOME') prevInc += val; else prevExp += val; }
+        if (before) { 
+            if (tx.transaction_type === 'INCOME') prevInc += val; 
+            else if (tx.transaction_type === 'EXPENSE') prevExp += val; 
+        }
+
         if (!inPeriod) return;
-        const desc = tx.description || CATEGORIES_BN[tx.category] || tx.category || '';
-        const method = pm === 'BANK' ? 'ব্যাংক' : 'নগদ';
-        if (tx.transaction_type === 'INCOME') { totalInc += val; incList.push({ date: tx.date, description: desc, amount: val, method }); }
-        else if (tx.transaction_type === 'EXPENSE') { totalExp += val; expList.push({ date: tx.date, description: desc, amount: val, method }); }
+
+        if (tx.transaction_type === 'INCOME') { 
+            totalInc += val; 
+            const isMemberChanda = (tx.member_id && state.members.some(m => m.id === tx.member_id)) || 
+                                   tx.category === 'সদস্য চাঁদা' || 
+                                   tx.category === 'মাসিক চাঁদা' || 
+                                   tx.is_member_fee;
+
+            if (isMemberChanda) {
+                totalSamajChanda += val;
+            } else {
+                const desc = tx.description || tx.donor_name || CATEGORIES_BN[tx.category] || tx.category || 'অন্যান্য আয়';
+                const method = pm === 'BANK' ? 'ব্যাংক' : 'নগদ';
+                rawIncList.push({ date: tx.date, description: desc, amount: val, method }); 
+            }
+        } else if (tx.transaction_type === 'EXPENSE') { 
+            totalExp += val; 
+            const desc = tx.description || CATEGORIES_BN[tx.category] || tx.category || 'অন্যান্য ব্যয়';
+            const method = pm === 'BANK' ? 'ব্যাংক' : 'নগদ';
+            expList.push({ date: tx.date, description: desc, amount: val, method }); 
+        }
     });
 
-    incList.sort((a,b) => new Date(a.date)-new Date(b.date));
-    expList.sort((a,b) => new Date(a.date)-new Date(b.date));
+    const incList = [];
+    if (totalSamajChanda > 0) {
+        incList.push({
+            date: startDate,
+            description: 'সমাজ চাঁদা (সকল সদস্যের একত্রিত আদায়)',
+            amount: totalSamajChanda,
+            method: 'নগদ/ব্যাংক'
+        });
+    }
+
+    rawIncList.sort((a, b) => new Date(a.date) - new Date(b.date));
+    incList.push(...rawIncList);
+
+    expList.sort((a, b) => new Date(a.date) - new Date(b.date));
+
     const net = totalInc - totalExp;
-    const prevBal = parseFloat(state.settings.initial_bank_balance||0) + parseFloat(state.settings.initial_cash_balance||0) + prevInc - prevExp;
+    const prevBal = parseFloat(state.settings.initial_bank_balance || 0) + parseFloat(state.settings.initial_cash_balance || 0) + prevInc - prevExp;
     const closingBal = prevBal + net;
     const maxRows = Math.max(incList.length, expList.length);
 
@@ -2246,9 +2351,9 @@ function generateAdvancedPrintReport() {
         const inc = incList[i], exp = expList[i];
         tRows += `<tr>
             <td>${inc ? formatShortDateBN(inc.date) : ''}</td>
-            <td style="text-align:left;">${inc ? inc.description : ''}</td>
+            <td style="text-align:left; font-weight: ${inc && inc.description.includes('সমাজ চাঁদা') ? 'bold' : 'normal'};">${inc ? inc.description : ''}</td>
             <td style="text-align:center;">${inc ? inc.method : ''}</td>
-            <td style="text-align:right;">${inc ? '৳ '+englishToBanglaNum(inc.amount.toFixed(2)) : ''}</td>
+            <td style="text-align:right; font-weight: ${inc && inc.description.includes('সমাজ চাঁদা') ? 'bold' : 'normal'};">${inc ? '৳ '+englishToBanglaNum(inc.amount.toFixed(2)) : ''}</td>
             <td style="background:#ccc;width:3px;padding:0;border-top:1px solid #555;border-bottom:1px solid #555;border-left:none;border-right:none;"></td>
             <td>${exp ? formatShortDateBN(exp.date) : ''}</td>
             <td style="text-align:left;">${exp ? exp.description : ''}</td>
@@ -2258,13 +2363,13 @@ function generateAdvancedPrintReport() {
     }
     if (!maxRows) tRows = '<tr><td colspan="9" style="text-align:center;padding:20px;color:#888;">এই সময়কালে কোনো আর্থিক লেনদেন সম্পন্ন হয়নি।</td></tr>';
 
-    const logoSrc = state.settings.logoData || '';
-    const mosqueN = state.settings.mosqueName || 'মসজিদের নাম';
-    const mosqueA = state.settings.address || '';
-    const todayStr = new Date().toLocaleDateString('bn-BD', {year:'numeric',month:'long',day:'numeric'});
+    const logoSrc = state.settings.logo_base64 || state.settings.logoData || '';
+    const mosqueN = state.settings.mosque_name || state.settings.mosqueName || DEFAULT_SETTINGS.mosque_name || 'মসজিদের নাম';
+    const mosqueA = state.settings.mosque_address || state.settings.address || DEFAULT_SETTINGS.mosque_address || '';
+    const todayStr = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
 
     const pw = window.open('', '_blank', 'width=960,height=720');
-    if (!pw) { alert('পপ-আপ ব্লক হয়েছে। অনুগ্রহ করে অনুমতি দিন।'); return; }
+    if (!pw) { alert('পপ-আপ ব্লক হয়েছে। অনুগ্রহ করে ব্রাউজারে পপ-আপ অনুমতি দিন।'); return; }
 
     pw.document.write(`<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8">
 <title>${mosqueN} - ${periodLabel}</title>
@@ -2274,7 +2379,8 @@ function generateAdvancedPrintReport() {
 body{font-family:'Hind Siliguri',Arial,sans-serif;font-size:12px;color:#000;background:#fff;}
 @page{size:A4;margin:12mm 12mm 15mm 12mm;}
 .ph{display:flex;align-items:center;position:relative;border-bottom:3px double #000;padding-bottom:10px;margin-bottom:14px;min-height:85px;}
-.logo{position:absolute;left:0;top:0;width:72px;height:72px;object-fit:contain;}
+.logo-container{position:absolute;left:0;top:0;width:72px;height:72px;border-radius:50%;background:#ffffff;border:1.5px solid #ddd;box-shadow:0 2px 6px rgba(0,0,0,0.1);display:flex;align-items:center;justify-content:center;overflow:hidden;padding:3px;}
+.logo-container img{width:100%;height:100%;object-fit:contain;border-radius:50%;}
 .tb{text-align:center;flex:1;}
 .tb h1{font-size:18px;font-weight:800;margin-bottom:3px;}
 .tb p{font-size:11px;color:#444;margin-bottom:2px;}
@@ -2307,7 +2413,7 @@ tbody tr:nth-child(even){background:#f9f9f9;}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
 </style></head><body>
 <div class="ph">
-${logoSrc?`<img src="${logoSrc}" alt="logo" class="logo">`:''}
+${logoSrc ? `<div class="logo-container"><img src="${logoSrc}" alt="logo"></div>` : ''}
 <div class="tb"><h1>${mosqueN}</h1><p>${mosqueA}</p><h2>আয়-ব্যয় বিবরণী</h2><div class="per">${periodLabel}</div></div>
 <div class="pdate">প্রকাশ তারিখ:<br>${todayStr}</div>
 </div>
@@ -4008,14 +4114,12 @@ function printArrearsList() {
   </thead>
   <tbody>
     ${tableRows}
-  </tbody>
-  <tfoot>
-    <tr>
-      <td colspan="4" style="text-align: right; font-weight: bold;">সর্বমোট বকেয়া পরিমাণ:</td>
-      <td style="text-align: right; color: #b71c1c; font-size: 14px; font-weight: 800;">৳ ${englishToBanglaNum(totalDuesSum.toFixed(0))}</td>
+    <tr style="font-weight: bold; background-color: #f5d6d1; border-top: 2px solid #000;">
+      <td colspan="4" style="text-align: right; font-weight: bold; padding: 10px 8px;">সর্বমোট বকেয়া পরিমাণ:</td>
+      <td style="text-align: right; color: #b71c1c; font-size: 14px; font-weight: 800; padding: 10px 8px;">৳ ${englishToBanglaNum(totalDuesSum.toFixed(0))}</td>
       <td></td>
     </tr>
-  </tfoot>
+  </tbody>
 </table>
 <div class="signatures">
   <div class="sig-box">কোষাধ্যক্ষ</div>
