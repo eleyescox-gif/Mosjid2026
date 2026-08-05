@@ -472,7 +472,7 @@ function applySettingsToUI() {
         const container = document.getElementById(id);
         if (container) {
             if (logo) {
-                container.innerHTML = `<img src="${logo}" alt="Logo">`;
+                container.innerHTML = `<img src="${logo}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%; background: #ffffff;">`;
             } else {
                 container.innerHTML = `<i class="fa-solid fa-mosque"></i>`;
             }
@@ -485,7 +485,9 @@ function applySettingsToUI() {
         const container = document.getElementById(id);
         if (container) {
             if (logo) {
-                container.innerHTML = `<img src="${logo}" alt="Logo" style="height: 55px; border-radius: 50%; border: 1px solid #000;">`;
+                container.innerHTML = `<div style="width: 65px; height: 65px; border-radius: 50%; background: #ffffff; border: 1.5px solid #ddd; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px;">
+                    <img src="${logo}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;">
+                </div>`;
                 container.style.display = 'flex';
             } else {
                 container.style.display = 'none'; // Hide logo section if no logo provided
@@ -700,6 +702,19 @@ function populateSettingsInputs() {
     document.getElementById('setInitialBankBalance').value = state.settings.initial_bank_balance || 0;
     document.getElementById('setInitialCashBalance').value = state.settings.initial_cash_balance || 0;
     
+    const logoPreviewContainer = document.getElementById('logoPreviewContainer');
+    const logoPreviewImg = document.getElementById('logoPreviewImg');
+    if (state.settings.logo_base64 && logoPreviewImg && logoPreviewContainer) {
+        logoPreviewImg.src = state.settings.logo_base64;
+        logoPreviewImg.style.background = '#ffffff';
+        logoPreviewImg.style.objectFit = 'contain';
+        logoPreviewImg.style.padding = '3px';
+        logoPreviewImg.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+        logoPreviewContainer.style.display = 'block';
+    } else if (logoPreviewContainer) {
+        logoPreviewContainer.style.display = 'none';
+    }
+
     // Render managing committee editor and recycle bin if admin is viewing
     if (state.currentUser.role === 'admin') {
         renderAdminCommitteeEditor();
@@ -3392,6 +3407,7 @@ function numberToBanglaWords(amount) {
     return words.trim() + ' টাকা মাত্র';
 }
 
+// Generate A4 Khata (All Members Monthly Collection Ledger Book)
 function generateAllMembersKhata() {
     const yearSelectAdmin = document.getElementById('adayKhataYearSelect');
     const yearSelectMake = document.getElementById('khataMakeYear');
@@ -3402,26 +3418,35 @@ function generateAllMembersKhata() {
         selectedYear = parseInt(yearSelectMake.value);
     }
     
-    // Filter active members only
-    const activeMembers = state.members.filter(m => m.status !== 'Pending' && !m.delete_requested && !m.is_deleted);
-    
-    if (activeMembers.length === 0) {
-        alert("কোনো সক্রিয় সদস্য পাওয়া যায়নি।");
+    // Approved active members
+    const approvedActiveMembers = state.members.filter(m => {
+        if (!m) return false;
+        const st = (m.status || '').toLowerCase();
+        return (st === 'active' || st === 'suspended' || st === '') && !m.delete_requested && !m.is_deleted;
+    });
+
+    if (approvedActiveMembers.length === 0) {
+        alert("খাতা তৈরি করার জন্য কোনো অনুমোদিত সক্রিয় সদস্য পাওয়া যায়নি!");
         return;
     }
     
     // Sort members numerically by realIndex/ID
+    const activeMembers = [...approvedActiveMembers];
     activeMembers.sort((a, b) => {
         const indexA = state.members.findIndex(m => m.id === a.id);
         const indexB = state.members.findIndex(m => m.id === b.id);
         return indexA - indexB;
     });
-
-    const khataContainer = document.getElementById('printableKhataArea');
-    if (!khataContainer) return;
     
     let htmlContent = '';
     const months = ['জানুয়ারি', 'ফেব্রুয়ারী', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1 to 12
+
+    const mosqueName = state.settings.mosque_name || state.settings.mosqueName || DEFAULT_SETTINGS.mosque_name || 'মসজিদের নাম';
+    const mosqueAddress = state.settings.mosque_address || state.settings.address || DEFAULT_SETTINGS.mosque_address || '';
+    const logoSrc = state.settings.logo_base64 || state.settings.logoData || '';
     
     activeMembers.forEach(member => {
         const realIndex = state.members.findIndex(m => m.id === member.id) + 1;
@@ -3456,17 +3481,16 @@ function generateAllMembersKhata() {
 
         months.forEach((monthName, index) => {
             const mNum = index + 1;
+            const isFutureMonth = (selectedYear > currentYear) || (selectedYear === currentYear && mNum > currentMonth);
             const sub = state.subscriptions.find(s => s.member_id === member.id && s.year === selectedYear && s.month === mNum);
             
             let monthlyFee = member.member_type === 'Free' ? 0 : (parseFloat(member.monthly_fee) || 0);
-            let currentMonthBokia = runningArrear;
-            let totalClaim = currentMonthBokia + monthlyFee;
             let paid = sub ? parseFloat(sub.amount_paid || 0) : 0;
-            let remainingDue = totalClaim - paid;
-            if (remainingDue < 0) remainingDue = 0;
 
-            runningArrear = remainingDue;
-
+            let currentMonthBokia = 0;
+            let totalClaim = 0;
+            let remainingDue = 0;
+            let remainingDueText = '—';
             let receiptNo = sub && sub.receipt_no ? englishToBanglaNum(sub.receipt_no.toString()) : '';
             if (!receiptNo && sub && sub.status === 'Paid') receiptNo = '—';
 
@@ -3476,59 +3500,92 @@ function generateAllMembersKhata() {
                 if (matchingTx) collector = matchingTx.created_by || matchingTx.collected_by || '';
             }
 
-            totalMonthlyFeeSum += monthlyFee;
-            totalClaimSum += totalClaim;
-            totalPaidSum += paid;
-            totalRemainingDueSum = remainingDue;
+            if (isFutureMonth) {
+                // Future months: do NOT calculate fee or claim debt
+                if (paid > 0) {
+                    remainingDueText = '<span style="color: #1b5e20;">পরিশোধিত (অগ্রিম)</span>';
+                    totalPaidSum += paid;
+                } else {
+                    remainingDueText = '—';
+                }
+            } else {
+                // Past and Current Months: calculate claims and arrears
+                currentMonthBokia = runningArrear;
+                totalClaim = currentMonthBokia + monthlyFee;
+                remainingDue = totalClaim - paid;
+                if (remainingDue < 0) remainingDue = 0;
+
+                runningArrear = remainingDue;
+
+                if (member.member_type === 'Free') {
+                    remainingDueText = '<span style="color: #1565c0;">মওকুফ</span>';
+                } else if (remainingDue > 0) {
+                    remainingDueText = `<span style="color: #b71c1c; font-weight: 700;">৳ ${englishToBanglaNum(remainingDue.toFixed(0))}</span>`;
+                } else {
+                    remainingDueText = '<span style="color: #1b5e20; font-weight: 700;">পরিশোধিত</span>';
+                }
+
+                totalMonthlyFeeSum += monthlyFee;
+                totalClaimSum += totalClaim;
+                totalPaidSum += paid;
+                totalRemainingDueSum = remainingDue;
+            }
 
             tableRows += `
-                <tr>
-                    <td style="text-align: left; font-weight: bold;">${monthName}</td>
-                    <td>${currentMonthBokia > 0 ? englishToBanglaNum(currentMonthBokia.toFixed(0)) : ''}</td>
-                    <td>${monthlyFee > 0 ? englishToBanglaNum(monthlyFee.toFixed(0)) : ''}</td>
-                    <td>${totalClaim > 0 ? englishToBanglaNum(totalClaim.toFixed(0)) : ''}</td>
-                    <td>${receiptNo}</td>
-                    <td>${paid > 0 ? englishToBanglaNum(paid.toFixed(0)) : ''}</td>
-                    <td>${remainingDue > 0 ? englishToBanglaNum(remainingDue.toFixed(0)) : ''}</td>
-                    <td>${collector}</td>
+                <tr style="${isFutureMonth ? 'background-color: #fafafa; color: #777;' : ''}">
+                    <td style="text-align: left; font-weight: bold;">${monthName} ${isFutureMonth ? '<small style="font-weight:normal;color:#999;">(অগ্রিম)</small>' : ''}</td>
+                    <td>${!isFutureMonth && currentMonthBokia > 0 ? englishToBanglaNum(currentMonthBokia.toFixed(0)) : '—'}</td>
+                    <td>${!isFutureMonth && monthlyFee > 0 ? englishToBanglaNum(monthlyFee.toFixed(0)) : (isFutureMonth ? '—' : '০')}</td>
+                    <td>${!isFutureMonth && totalClaim > 0 ? englishToBanglaNum(totalClaim.toFixed(0)) : '—'}</td>
+                    <td>${receiptNo || '—'}</td>
+                    <td>${paid > 0 ? englishToBanglaNum(paid.toFixed(0)) : '—'}</td>
+                    <td>${remainingDueText}</td>
+                    <td>${collector || '—'}</td>
                 </tr>
             `;
         });
         
-        // Total row
+        // Total row up to current month
+        const totalDueDisplay = totalRemainingDueSum > 0 
+            ? `<span style="color: #b71c1c; font-weight: 800;">৳ ${englishToBanglaNum(totalRemainingDueSum.toFixed(0))}</span>` 
+            : `<span style="color: #1b5e20; font-weight: 800;">পরিশোধিত</span>`;
+
         tableRows += `
-            <tr style="font-weight: bold; background-color: #f9f9f9;">
-                <td style="text-align: left;">সর্ব মোট</td>
-                <td>${initialBokiaForYear > 0 ? englishToBanglaNum(initialBokiaForYear.toFixed(0)) : ''}</td>
-                <td>${totalMonthlyFeeSum > 0 ? englishToBanglaNum(totalMonthlyFeeSum.toFixed(0)) : ''}</td>
-                <td>${totalClaimSum > 0 ? englishToBanglaNum(totalClaimSum.toFixed(0)) : ''}</td>
+            <tr style="font-weight: bold; background-color: #f0f4f1; border-top: 2px solid #000;">
+                <td style="text-align: left;">সর্ব মোট (বর্তমান মাস পর্যন্ত)</td>
+                <td>${initialBokiaForYear > 0 ? englishToBanglaNum(initialBokiaForYear.toFixed(0)) : '—'}</td>
+                <td>${totalMonthlyFeeSum > 0 ? englishToBanglaNum(totalMonthlyFeeSum.toFixed(0)) : '০'}</td>
+                <td>${totalClaimSum > 0 ? englishToBanglaNum(totalClaimSum.toFixed(0)) : '—'}</td>
                 <td></td>
-                <td>${totalPaidSum > 0 ? englishToBanglaNum(totalPaidSum.toFixed(0)) : ''}</td>
-                <td>${totalRemainingDueSum > 0 ? englishToBanglaNum(totalRemainingDueSum.toFixed(0)) : ''}</td>
+                <td>${totalPaidSum > 0 ? englishToBanglaNum(totalPaidSum.toFixed(0)) : '০'}</td>
+                <td>${totalDueDisplay}</td>
                 <td></td>
             </tr>
         `;
         
-        const paidWords = totalPaidSum > 0 ? numberToBanglaWords(totalPaidSum) : '....................................................................................';
+        const paidWords = totalPaidSum > 0 ? numberToBanglaWords(totalPaidSum) : 'শূন্য';
 
         const memberHtml = `
             <div class="khata-page">
                 <div class="khata-header" style="position: relative; margin-bottom: 20px;">
-                    <img src="${state.settings.logoData || 'icons/mosque_icon_192.png'}" alt="Logo" style="position: absolute; left: 0; top: 0; width: 65px; height: 65px; object-fit: contain;">
+                    ${logoSrc ? `<div style="position: absolute; left: 0; top: 0; width: 68px; height: 68px; border-radius: 50%; background: #ffffff; border: 1.5px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px;">
+                        <img src="${logoSrc}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;">
+                    </div>` : ''}
                     <div class="khata-title" style="text-align: center;">
-                        <h2 style="font-size: 20px; margin: 0 0 4px 0; font-weight: bold;">${state.settings.mosqueName}</h2>
-                        <p style="font-size: 13px; margin: 0 0 4px 0; color: #333;">${state.settings.address}</p>
+                        <h2 style="font-size: 20px; margin: 0 0 4px 0; font-weight: bold; color: #000;">${mosqueName}</h2>
+                        <p style="font-size: 13px; margin: 0 0 4px 0; color: #333;">${mosqueAddress}</p>
                         <h3 style="font-size: 16px; margin: 0 0 4px 0; font-weight: bold;">মাসিক চাঁদা আদায় বহি</h3>
-                        <p style="font-size: 14px; font-weight: bold; margin: 0;">বছর: ${englishToBanglaNum(selectedYear.toString())} খ্রি:</p>
+                        <p style="font-size: 13px; font-weight: bold; margin: 0;">বছর: ${englishToBanglaNum(selectedYear.toString())} খ্রি: (বর্তমান মাস পর্যন্ত হিসাব)</p>
                     </div>
-                    <div style="position: absolute; right: 0; top: 0; font-weight: bold; font-size: 14px;">
-                        ক্রমিক নং: ${memberNum}
+                    <div style="position: absolute; right: 0; top: 0; font-weight: bold; font-size: 14px; border: 1px solid #000; padding: 4px 8px; border-radius: 4px;">
+                        সদস্য নং: ${memberNum}
                     </div>
                 </div>
                 
-                <div class="khata-top-info" style="display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: bold; font-size: 14px;">
+                <div class="khata-top-info" style="display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: bold; font-size: 14px; background: #fdfdfd; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
                     <div>নাম: <span style="font-weight: normal; margin-left: 5px;">${member.name}</span></div>
                     <div>মোবাইল: <span style="font-weight: normal; margin-left: 5px;">${member.phone ? englishToBanglaNum(member.phone) : '—'}</span></div>
+                    <div>বর্তমান স্থিতি: <span style="margin-left: 5px;">${totalRemainingDueSum > 0 ? `<span style="color:#b71c1c;">বকেয়া ৳ ${englishToBanglaNum(totalRemainingDueSum.toFixed(0))}</span>` : `<span style="color:#1b5e20;">পরিশোধিত</span>`}</span></div>
                 </div>
                 
                 <table>
@@ -3540,8 +3597,8 @@ function generateAllMembersKhata() {
                             <th style="width: 12%;">মোট দাবী</th>
                             <th style="width: 13%;">রশিদ নম্বর</th>
                             <th style="width: 12%;">মোট আদায়</th>
-                            <th style="width: 12%;">মোট বাকী</th>
-                            <th style="width: 12%;">আদায়কারী</th>
+                            <th style="width: 14%;">মোট বাকী / স্থিতি</th>
+                            <th style="width: 10%;">আদায়কারী</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3549,15 +3606,15 @@ function generateAllMembersKhata() {
                     </tbody>
                 </table>
                 
-                <div class="khata-footer" style="margin-top: 25px; font-size: 14px; line-height: 2.0;">
-                    উক্ত সদস্য থেকে ${englishToBanglaNum(selectedYear.toString())} সালে সর্ব মোট ${totalPaidSum > 0 ? englishToBanglaNum(totalPaidSum.toFixed(0)) : '...................'} টাকা গ্রহণ করা হয়েছে।<br>
-                    কথায়: ${paidWords}
+                <div class="khata-footer" style="margin-top: 20px; font-size: 13px; line-height: 1.8;">
+                    উক্ত সদস্য থেকে ${englishToBanglaNum(selectedYear.toString())} সালে সর্ব মোট ${totalPaidSum > 0 ? englishToBanglaNum(totalPaidSum.toFixed(0)) : '০'} টাকা গ্রহণ করা হয়েছে। (কথায়: ${paidWords} টাকা)<br>
+                    <strong>বর্তমান হিসাব স্থিতি:</strong> ${totalRemainingDueSum > 0 ? `সর্বমোট বকেয়া পরিমাণ ৳ ${englishToBanglaNum(totalRemainingDueSum.toFixed(0))}` : `<span style="color: #1b5e20; font-weight: bold;">বর্তমান মাস পর্যন্ত সকল চাঁদা সফলভাবে পরিশোধিত হয়েছে।</span>`}
                 </div>
                 
-                <div class="khata-signatures" style="display: flex; justify-content: space-between; margin-top: 45px; font-weight: bold; font-size: 14px;">
-                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 140px; text-align: center;">কোষাধ্যক্ষ</div>
-                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 140px; text-align: center;">সাধারণ সম্পাদক</div>
-                    <div style="border-top: 1px dashed #000; padding-top: 5px; width: 140px; text-align: center;">সভাপতি</div>
+                <div class="khata-signatures" style="display: flex; justify-content: space-between; margin-top: 40px; font-weight: bold; font-size: 13px;">
+                    <div style="border-top: 1px solid #000; padding-top: 5px; width: 140px; text-align: center;">কোষাধ্যক্ষ</div>
+                    <div style="border-top: 1px solid #000; padding-top: 5px; width: 140px; text-align: center;">সাধারণ সম্পাদক</div>
+                    <div style="border-top: 1px solid #000; padding-top: 5px; width: 140px; text-align: center;">সভাপতি</div>
                 </div>
             </div>
         `;
@@ -3667,10 +3724,12 @@ ${htmlContent}
 }
 
 // ==========================================
-// Print Filtered Member List (A4 Layout)
+// ==========================================
+// 1. Print General Member Directory & Register (A4 Layout)
+// Column Layout: সদস্য নং | নাম | পদবী | মোবাইল | স্বাক্ষর | মন্তব্য
 // ==========================================
 function printAllMembersList() {
-    const searchVal = document.getElementById('memberSearchInput').value.toLowerCase();
+    const searchVal = (document.getElementById('memberSearchInput')?.value || '').toLowerCase();
     
     const approvedActiveMembers = state.members.filter(m => {
         if (!m) return false;
@@ -3684,7 +3743,8 @@ function printAllMembersList() {
         const displayNum = String(realIndex).padStart(2, '0');
         const displayNumBN = englishToBanglaNum(displayNum);
         
-        const matchesSearch = m.name.toLowerCase().includes(searchVal) || 
+        const matchesSearch = !searchVal || 
+                              m.name.toLowerCase().includes(searchVal) || 
                               (m.phone && m.phone.includes(searchVal)) ||
                               displayNum.includes(searchVal) ||
                               displayNumBN.includes(searchVal) ||
@@ -3703,15 +3763,12 @@ function printAllMembersList() {
         return;
     }
 
-    // Sort by real Index
+    // Sort numerically by real Index
     filteredMembers.sort((a, b) => {
         const indexA = state.members.findIndex(m => m.id === a.id);
         const indexB = state.members.findIndex(m => m.id === b.id);
         return indexA - indexB;
     });
-
-    const printContainer = document.getElementById('printableAllMembersArea');
-    if (!printContainer) return;
 
     let filterText = 'সকল সদস্য';
     if (state.memberFilter === 'due') filterText = 'বকেয়া সদস্য';
@@ -3720,44 +3777,49 @@ function printAllMembersList() {
     else if (state.memberFilter === 'Free') filterText = 'ফ্রি সদস্য';
 
     let tableRows = '';
-    let totalDues = 0;
 
     filteredMembers.forEach((m) => {
         const realIndex = state.members.findIndex(member => member.id === m.id) + 1;
         const displayNum = String(realIndex).padStart(2, '0');
-        const dueAmount = calculateMemberTotalDue(m.id);
-        totalDues += dueAmount;
 
-        let typeLabel = 'সাধারণ';
-        if (m.member_type === 'Poor') typeLabel = 'দরিদ্র';
-        else if (m.member_type === 'Free') typeLabel = 'ফ্রি';
+        // Determine designation/committee role
+        let designation = 'সাধারণ সদস্য';
+        if (state.committee && Array.isArray(state.committee)) {
+            const comMember = state.committee.find(c => c.member_id === m.id || c.name === m.name);
+            if (comMember && comMember.role) {
+                designation = comMember.role;
+            }
+        }
+        if (designation === 'সাধারণ সদস্য') {
+            if (m.member_type === 'Poor') designation = 'দরিদ্র সদস্য';
+            else if (m.member_type === 'Free') designation = 'ফ্রি সদস্য';
+        }
 
         tableRows += `
             <tr>
-                <td style="text-align: center;">${englishToBanglaNum(displayNum)}</td>
+                <td style="text-align: center; font-weight: bold;">${englishToBanglaNum(displayNum)}</td>
                 <td style="text-align: left; font-weight: bold;">${m.name}</td>
-                <td style="text-align: center;">${typeLabel}</td>
-                <td style="text-align: center;">${englishToBanglaNum(m.phone || '—')}</td>
-                <td style="text-align: right; font-weight: bold; color: ${dueAmount > 0 ? '#b71c1c' : '#1b5e20'};">
-                    ৳ ${englishToBanglaNum(dueAmount.toFixed(0))}
-                </td>
+                <td style="text-align: center;">${designation}</td>
+                <td style="text-align: center;">${m.phone ? englishToBanglaNum(m.phone) : '—'}</td>
+                <td style="text-align: center; min-width: 80px;"></td>
+                <td style="text-align: center; min-width: 80px;"></td>
             </tr>
         `;
     });
 
     const printDate = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
-    const logoSrc = state.settings.logoData || '';
-    const mosqueName = state.settings.mosqueName || 'মসজিদের নাম';
-    const mosqueAddress = state.settings.address || '';
+    const mosqueName = state.settings.mosque_name || state.settings.mosqueName || DEFAULT_SETTINGS.mosque_name || 'মসজিদের নাম';
+    const mosqueAddress = state.settings.mosque_address || state.settings.address || DEFAULT_SETTINGS.mosque_address || '';
+    const logoSrc = state.settings.logo_base64 || state.settings.logoData || '';
 
     const printWindow = window.open('', '_blank', 'width=900,height=700');
-    if (!printWindow) { alert("পপ-আপ ব্লক করা আছে। অনুগ্রহ করে ব্রাউজারে অনুমতি দিন।"); return; }
+    if (!printWindow) { alert("পপ-আপ ব্লক করা আছে। অনুগ্রহ করে ব্রাউজারে পপ-আপ অনুমতি দিন।"); return; }
 
     printWindow.document.write(`<!DOCTYPE html>
 <html lang="bn">
 <head>
 <meta charset="UTF-8">
-<title>${mosqueName} — সদস্য তালিকা (${filterText})</title>
+<title>${mosqueName} — সদস্য রেজিস্টার (${filterText})</title>
 <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -3770,35 +3832,178 @@ function printAllMembersList() {
   .title-block p { font-size: 12px; color: #444; margin-bottom: 3px; }
   .title-block h3 { font-size: 15px; font-weight: 700; margin-top: 4px; border-bottom: 1px solid #555; display: inline-block; padding-bottom: 2px; }
   .print-date { position: absolute; right: 0; top: 0; font-size: 11px; color: #555; text-align: right; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-  th, td { border: 1px solid #000; padding: 8px 6px; vertical-align: middle; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
+  th, td { border: 1px solid #000; padding: 8px 6px; vertical-align: middle; word-wrap: break-word; }
   thead tr { background-color: #d6e4d6; }
   th { font-size: 12px; font-weight: 700; text-align: center; }
-  tbody tr:nth-child(even) { background-color: #f9f9f9; }
-  tfoot tr { background-color: #e8e8e8; font-weight: 700; }
-  .signatures { display: flex; justify-content: space-between; margin-top: 50px; }
+  tbody tr:nth-child(even) { background-color: #fcfcfc; }
+  .signatures { display: flex; justify-content: space-between; margin-top: 45px; }
   .sig-box { text-align: center; width: 160px; border-top: 1px solid #000; padding-top: 5px; font-size: 13px; font-weight: 700; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
 </head>
 <body>
 <div class="header">
-  ${logoSrc ? `<img src="${logoSrc}" alt="Logo" class="logo">` : ''}
+  ${logoSrc ? `<div style="position: absolute; left: 0; top: 0; width: 68px; height: 68px; border-radius: 50%; background: #ffffff; border: 1.5px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px;">
+    <img src="${logoSrc}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;">
+  </div>` : ''}
   <div class="title-block">
     <h2>${mosqueName}</h2>
     <p>${mosqueAddress}</p>
-    <h3>সদস্য তালিকা (${filterText})</h3>
+    <h3>সদস্য রেজিস্টার তালিকা (${filterText})</h3>
   </div>
   <div class="print-date">প্রিন্ট তারিখ:<br>${printDate}</div>
 </div>
 <table>
   <thead>
     <tr>
-      <th style="width: 12%;">সদস্য নং</th>
-      <th style="width: 32%; text-align: left;">সদস্যের নাম</th>
-      <th style="width: 16%;">ক্যাটাগরি</th>
-      <th style="width: 22%;">মোবাইল নম্বর</th>
-      <th style="width: 18%; text-align: right;">বকেয়া চাঁদা</th>
+      <th style="width: 10%;">সদস্য নং</th>
+      <th style="width: 28%; text-align: left;">সদস্যের নাম</th>
+      <th style="width: 18%;">পদবী</th>
+      <th style="width: 18%;">মোবাইল</th>
+      <th style="width: 14%;">স্বাক্ষর</th>
+      <th style="width: 12%;">মন্তব্য</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${tableRows}
+  </tbody>
+</table>
+<div class="signatures">
+  <div class="sig-box">কোষাধ্যক্ষ</div>
+  <div class="sig-box">সাধারণ সম্পাদক</div>
+  <div class="sig-box">সভাপতি</div>
+</div>
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 800);
+}
+
+// ==========================================
+// 2. Print Arrears Member List (A4 Layout)
+// Column Layout: সদস্য নং | নাম | মোবাইল | মাসিক চাঁদা | বকেয়া চাঁদা | মন্তব্য
+// ==========================================
+function printArrearsList() {
+    const searchVal = (document.getElementById('memberSearchInput')?.value || '').toLowerCase();
+    
+    const approvedActiveMembers = state.members.filter(m => {
+        if (!m) return false;
+        const st = (m.status || '').toLowerCase();
+        return (st === 'active' || st === 'suspended' || st === '') && !m.delete_requested && !m.is_deleted;
+    });
+
+    // Only members with arrears (dueAmount > 0)
+    const arrearsMembers = approvedActiveMembers.filter(m => {
+        const memberDue = calculateMemberTotalDue(m.id);
+        if (memberDue <= 0) return false;
+
+        const realIndex = state.members.findIndex(member => member.id === m.id) + 1;
+        const displayNum = String(realIndex).padStart(2, '0');
+        const displayNumBN = englishToBanglaNum(displayNum);
+        
+        const matchesSearch = !searchVal || 
+                              m.name.toLowerCase().includes(searchVal) || 
+                              (m.phone && m.phone.includes(searchVal)) ||
+                              displayNum.includes(searchVal) ||
+                              displayNumBN.includes(searchVal) ||
+                              m.id.includes(searchVal);
+                              
+        return matchesSearch;
+    });
+
+    if (arrearsMembers.length === 0) {
+        alert("কোনো বকেয়া সদস্য পাওয়া যায়নি!");
+        return;
+    }
+
+    // Sort numerically by real Index
+    arrearsMembers.sort((a, b) => {
+        const indexA = state.members.findIndex(m => m.id === a.id);
+        const indexB = state.members.findIndex(m => m.id === b.id);
+        return indexA - indexB;
+    });
+
+    let tableRows = '';
+    let totalDuesSum = 0;
+
+    arrearsMembers.forEach((m) => {
+        const realIndex = state.members.findIndex(member => member.id === m.id) + 1;
+        const displayNum = String(realIndex).padStart(2, '0');
+        const dueAmount = calculateMemberTotalDue(m.id);
+        const monthlyFee = m.member_type === 'Free' ? 0 : (parseFloat(m.monthly_fee) || 0);
+        totalDuesSum += dueAmount;
+
+        tableRows += `
+            <tr>
+                <td style="text-align: center; font-weight: bold;">${englishToBanglaNum(displayNum)}</td>
+                <td style="text-align: left; font-weight: bold;">${m.name}</td>
+                <td style="text-align: center;">${m.phone ? englishToBanglaNum(m.phone) : '—'}</td>
+                <td style="text-align: right;">${monthlyFee > 0 ? '৳ ' + englishToBanglaNum(monthlyFee.toFixed(0)) : 'মওকুফ'}</td>
+                <td style="text-align: right; font-weight: bold; color: #b71c1c;">৳ ${englishToBanglaNum(dueAmount.toFixed(0))}</td>
+                <td style="text-align: center;"></td>
+            </tr>
+        `;
+    });
+
+    const printDate = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
+    const mosqueName = state.settings.mosque_name || state.settings.mosqueName || DEFAULT_SETTINGS.mosque_name || 'মসজিদের নাম';
+    const mosqueAddress = state.settings.mosque_address || state.settings.address || DEFAULT_SETTINGS.mosque_address || '';
+    const logoSrc = state.settings.logo_base64 || state.settings.logoData || '';
+
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) { alert("পপ-আপ ব্লক করা আছে। অনুগ্রহ করে ব্রাউজারে পপ-আপ অনুমতি দিন।"); return; }
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<title>${mosqueName} — বকেয়া সদস্য তালিকা</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Hind Siliguri', Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
+  @page { size: A4 portrait; margin: 15mm 15mm 20mm 15mm; }
+  .header { display: flex; align-items: flex-start; justify-content: center; position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 14px; min-height: 75px; }
+  .logo { position: absolute; left: 0; top: 0; width: 68px; height: 68px; object-fit: contain; }
+  .title-block { text-align: center; }
+  .title-block h2 { font-size: 20px; font-weight: 700; margin-bottom: 3px; }
+  .title-block p { font-size: 12px; color: #444; margin-bottom: 3px; }
+  .title-block h3 { font-size: 15px; font-weight: 700; margin-top: 4px; border-bottom: 1px solid #555; display: inline-block; padding-bottom: 2px; color: #b71c1c; }
+  .print-date { position: absolute; right: 0; top: 0; font-size: 11px; color: #555; text-align: right; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
+  th, td { border: 1px solid #000; padding: 8px 6px; vertical-align: middle; word-wrap: break-word; }
+  thead tr { background-color: #fbe9e7; }
+  th { font-size: 12px; font-weight: 700; text-align: center; }
+  tbody tr:nth-child(even) { background-color: #fff8f6; }
+  tfoot tr { background-color: #f5d6d1; font-weight: 700; }
+  .signatures { display: flex; justify-content: space-between; margin-top: 45px; }
+  .sig-box { text-align: center; width: 160px; border-top: 1px solid #000; padding-top: 5px; font-size: 13px; font-weight: 700; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<div class="header">
+  ${logoSrc ? `<div style="position: absolute; left: 0; top: 0; width: 68px; height: 68px; border-radius: 50%; background: #ffffff; border: 1.5px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px;">
+    <img src="${logoSrc}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;">
+  </div>` : ''}
+  <div class="title-block">
+    <h2>${mosqueName}</h2>
+    <p>${mosqueAddress}</p>
+    <h3>সদস্যদের বকেয়া চাঁদা পরিশোধের তালিকা</h3>
+  </div>
+  <div class="print-date">প্রিন্ট তারিখ:<br>${printDate}</div>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 10%;">সদস্য নং</th>
+      <th style="width: 28%; text-align: left;">সদস্যের নাম</th>
+      <th style="width: 18%;">মোবাইল</th>
+      <th style="width: 14%; text-align: right;">মাসিক চাঁদা</th>
+      <th style="width: 16%; text-align: right;">মোট বকেয়া (৳)</th>
+      <th style="width: 14%;">মন্তব্য</th>
     </tr>
   </thead>
   <tbody>
@@ -3806,8 +4011,9 @@ function printAllMembersList() {
   </tbody>
   <tfoot>
     <tr>
-      <td colspan="4" style="text-align: right;">সর্বমোট বকেয়া পরিমাণ:</td>
-      <td style="text-align: right; color: #b71c1c; font-size: 14px;">৳ ${englishToBanglaNum(totalDues.toFixed(0))}</td>
+      <td colspan="4" style="text-align: right; font-weight: bold;">সর্বমোট বকেয়া পরিমাণ:</td>
+      <td style="text-align: right; color: #b71c1c; font-size: 14px; font-weight: 800;">৳ ${englishToBanglaNum(totalDuesSum.toFixed(0))}</td>
+      <td></td>
     </tr>
   </tfoot>
 </table>
