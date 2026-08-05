@@ -11,7 +11,7 @@
     <meta name="theme-color" content="#2e7d32">
     <!-- FontAwesome for Premium Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=11">
+    <link rel="stylesheet" href="style.css?v=2026.08.05.5">
     <!-- SheetJS for Excel Import -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -376,12 +376,9 @@
 
                 <!-- Print Institution Statement Triggers -->
                 <div style="display: flex; gap: 10px; flex-direction: column;">
-                    <button class="btn btn-secondary print-report-btn" onclick="generateInstitutionPrintReport()">
-                        <i class="fa-solid fa-print"></i> মাসিক বিবরণী প্রিন্ট (A4)
+                    <button class="btn btn-primary" onclick="generateAdvancedPrintReport()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #062b19, #0b4528);">
+                        <i class="fa-solid fa-print"></i> <span id="printBtnLabel">বিবরণী প্রিন্ট (A4)</span>
                     </button>
-
-
-
                 </div>
             </section>
 
@@ -1161,7 +1158,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Main JavaScript App -->
-    <script src="app.js?v=2026.08.05.3"></script>
+    <script src="app.js?v=2026.08.05.4"></script>
     <script type="module" src="firebase-db.js?v=2"></script>
     <script>
         if ('serviceWorker' in navigator) {
