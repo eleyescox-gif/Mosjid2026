@@ -251,9 +251,12 @@ function processAdvanceDeductions() {
         let advance = parseFloat(member.advance_balance || 0);
         if (advance <= 0) return;
 
-        const joinParts = member.join_date.split('-');
-        const joinYear = parseInt(joinParts[0]);
-        const joinMonth = parseInt(joinParts[1]);
+        const fee = parseFloat(member.monthly_fee || 0);
+        if (fee <= 0) return;
+
+        const joinParts = (member.join_date || '2025-01-01').split('-');
+        const joinYear = parseInt(joinParts[0]) || 2025;
+        const joinMonth = parseInt(joinParts[1]) || 1;
 
         let year = joinYear;
         let m = joinMonth;
@@ -1471,7 +1474,7 @@ function setMemberFilter(filter, el) {
 // Calculate Total Due for a Member
 function calculateMemberTotalDue(memberId) {
     const member = state.members.find(m => m.id === memberId);
-    if (!member || member.member_type === 'Free' || member.status === 'Pending') return 0;
+    if (!member || member.member_type === 'Free' || member.status === 'Pending' || member.is_deleted) return 0;
 
     let totalExpected = 0;
     let totalPaid = 0;
@@ -1480,9 +1483,10 @@ function calculateMemberTotalDue(memberId) {
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
-    const joinParts = member.join_date.split('-');
-    const joinYear = parseInt(joinParts[0]);
-    const joinMonth = parseInt(joinParts[1]);
+    const joinParts = (member.join_date || '2025-01-01').split('-');
+    const joinYear = parseInt(joinParts[0]) || 2025;
+    const joinMonth = parseInt(joinParts[1]) || 1;
+    const fee = parseFloat(member.monthly_fee || 0);
 
     for (let year = joinYear; year <= currentYear; year++) {
         const startM = year === joinYear ? joinMonth : 1;
@@ -1490,9 +1494,9 @@ function calculateMemberTotalDue(memberId) {
 
         for (let m = startM; m <= endM; m++) {
             const sub = state.subscriptions.find(s => s.member_id === memberId && s.year === year && s.month === m);
-            totalExpected += member.monthly_fee;
+            totalExpected += fee;
             if (sub) {
-                totalPaid += parseFloat(sub.amount_paid);
+                totalPaid += parseFloat(sub.amount_paid || 0);
             }
         }
     }
@@ -1851,13 +1855,13 @@ function handleEasyPaymentSubmit(e) {
     }
 
     let remainingPaid = totalPaid;
-    const currentYear = 2026;
     const now = new Date();
+    const currentYear = now.getFullYear();
     const currentMonthLimit = now.getMonth() + 1;
 
-    const joinParts = member.join_date.split('-');
-    const joinYear = parseInt(joinParts[0]);
-    const joinMonth = parseInt(joinParts[1]);
+    const joinParts = (member.join_date || '2025-01-01').split('-');
+    const joinYear = parseInt(joinParts[0]) || 2025;
+    const joinMonth = parseInt(joinParts[1]) || 1;
 
     for (let year = joinYear; year <= currentYear && remainingPaid > 0; year++) {
         const startM = year === joinYear ? joinMonth : 1;
@@ -1987,80 +1991,156 @@ function printArrearsList() {
     triggerPrint('printableArrearsListArea', 'Arrears_List', 'print-active-arrears');
 }
 
-// Generate A4 Yearly Report & trigger printing (MEMBER ONLY details, NO pad header/logo)
+// Generate A4 Yearly Report & trigger printing (Individual Member Sheet)
 function generateYearlyPrintReport() {
     const memberId = state.activeMemberId;
     const member = state.members.find(m => m.id === memberId);
     if (!member) return;
 
-    // Load printable text elements matching precise user format request
-    document.getElementById('printName').innerText = member.name;
-    document.getElementById('printPhone').innerText = englishToBanglaNum(member.phone);
-    document.getElementById('printAddress').innerText = member.address;
-
+    const selectYear = new Date().getFullYear();
     let typeLabel = 'সাধারণ সদস্য';
     if (member.member_type === 'Poor') { typeLabel = 'দরিদ্র সদস্য'; }
     else if (member.member_type === 'Free') { typeLabel = 'ফ্রি সদস্য (মওকুফ)'; }
-    document.getElementById('printType').innerText = typeLabel;
 
     const advanceVal = parseFloat(member.advance_balance || 0);
-    document.getElementById('printAdvance').innerText = englishToBanglaNum(advanceVal.toFixed(2));
 
-    // Find the furthest month paid (including advance allocations)
     let lastPaidMonthStr = '—';
     const memberSubs = state.subscriptions.filter(s => s.member_id === memberId && s.status === 'Paid');
     if (memberSubs.length > 0) {
-        memberSubs.sort((a, b) => {
-            if (a.year !== b.year) return a.year - b.year;
-            return a.month - b.month;
-        });
+        memberSubs.sort((a, b) => (a.year !== b.year ? a.year - b.year : a.month - b.month));
         const lastSub = memberSubs[memberSubs.length - 1];
         lastPaidMonthStr = `${BANGLA_MONTHS[lastSub.month]} ${englishToBanglaNum(lastSub.year.toString())} পর্যন্ত`;
     }
-    document.getElementById('printPaidUpTo').innerText = lastPaidMonthStr;
 
-    // Table rows Jan-Dec 2026
-    const tableBody = document.getElementById('printTableBody');
-    tableBody.innerHTML = '';
-    const currentYear = 2026;
-    
+    let tableRows = '';
+    let totalPaidSum = 0;
+    let totalDueSum = 0;
+
     for (let m = 1; m <= 12; m++) {
-        const sub = state.subscriptions.find(s => s.member_id === memberId && s.year === currentYear && s.month === m);
-        
-        let rate = member.monthly_fee;
+        const sub = state.subscriptions.find(s => s.member_id === memberId && s.year === selectYear && s.month === m);
+        let rate = parseFloat(member.monthly_fee || 0);
         let paid = 0;
         let due = member.member_type === 'Free' ? 0 : rate;
         let dateStr = '—';
         let recNo = '—';
 
         if (sub) {
-            paid = parseFloat(sub.amount_paid);
-            due = parseFloat(sub.due_amount);
+            paid = parseFloat(sub.amount_paid || 0);
+            due = parseFloat(sub.due_amount || 0);
             dateStr = sub.last_payment_date ? formatDate(sub.last_payment_date) : '—';
-            recNo = sub.receipt_no ? englishToBanglaNum(sub.receipt_no) : '—';
+            recNo = sub.receipt_no ? englishToBanglaNum(sub.receipt_no.toString()) : '—';
         }
 
-        if (member.member_type === 'Free') {
-            due = 0;
-            paid = 0;
-        }
+        if (member.member_type === 'Free') { due = 0; paid = 0; }
 
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td style="text-align: center;">${BANGLA_MONTHS[m]}</td>
-            <td style="text-align: right;">${englishToBanglaNum(rate.toString())}</td>
-            <td style="text-align: right;">${englishToBanglaNum(paid.toString())}</td>
-            <td style="text-align: right;">${englishToBanglaNum(due.toString())}</td>
-            <td style="text-align: center;">${dateStr}</td>
-            <td style="text-align: center;">${recNo}</td>
+        totalPaidSum += paid;
+        totalDueSum += due;
+
+        tableRows += `
+            <tr>
+                <td style="text-align: center;">${BANGLA_MONTHS[m]}</td>
+                <td style="text-align: right;">৳ ${englishToBanglaNum(rate.toFixed(0))}</td>
+                <td style="text-align: right; color: #1b5e20;">৳ ${englishToBanglaNum(paid.toFixed(0))}</td>
+                <td style="text-align: right; color: ${due > 0 ? '#b71c1c' : '#555'};">৳ ${englishToBanglaNum(due.toFixed(0))}</td>
+                <td style="text-align: center;">${dateStr}</td>
+                <td style="text-align: center;">${recNo}</td>
+            </tr>
         `;
-        tableBody.appendChild(tr);
     }
 
-    // Set class to print ONLY member sheet, and print
-    document.body.classList.remove('print-active-member', 'print-active-inst', 'print-active-arrears', 'print-active-full');
-    document.body.classList.add('print-active-member');
-    triggerPrint('printableMemberReceiptArea', 'Member_Receipt_' + member.name, 'print-active-member');
+    const logoSrc = state.settings.logoData || '';
+    const mosqueName = state.settings.mosqueName || 'মসজিদের নাম';
+    const mosqueAddress = state.settings.address || '';
+    const realIndex = state.members.findIndex(m => m.id === member.id) + 1;
+    const serialNo = englishToBanglaNum(String(realIndex).padStart(2, '0'));
+
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) { alert("পপ-আপ ব্লক করা আছে। অনুগ্রহ করে অনুমতি দিন।"); return; }
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<title>${member.name} — বাৎসরিক চাঁদা বিবরণী (${englishToBanglaNum(selectYear.toString())})</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Hind Siliguri', Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
+  @page { size: A4 portrait; margin: 15mm 15mm 20mm 15mm; }
+  .header { display: flex; align-items: flex-start; justify-content: center; position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 14px; min-height: 75px; }
+  .logo { position: absolute; left: 0; top: 0; width: 68px; height: 68px; object-fit: contain; }
+  .title-block { text-align: center; }
+  .title-block h2 { font-size: 20px; font-weight: 700; margin-bottom: 3px; }
+  .title-block p { font-size: 12px; color: #444; margin-bottom: 3px; }
+  .title-block h3 { font-size: 15px; font-weight: 700; margin-top: 4px; border-bottom: 1px solid #555; display: inline-block; padding-bottom: 2px; }
+  .serial { position: absolute; right: 0; top: 0; font-size: 13px; font-weight: 700; border: 1px solid #000; padding: 4px 10px; border-radius: 4px; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px; margin-bottom: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; background: #fdfdfd; }
+  .info-item { line-height: 1.6; }
+  .info-item span { font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th, td { border: 1px solid #000; padding: 7px 6px; vertical-align: middle; }
+  thead tr { background-color: #d6e4d6; }
+  th { font-size: 12px; font-weight: 700; text-align: center; }
+  tbody tr:nth-child(even) { background-color: #f9f9f9; }
+  tfoot tr { background-color: #e8e8e8; font-weight: 700; }
+  .signatures { display: flex; justify-content: space-between; margin-top: 45px; }
+  .sig-box { text-align: center; width: 160px; border-top: 1px solid #000; padding-top: 5px; font-size: 13px; font-weight: 700; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<div class="header">
+  ${logoSrc ? `<img src="${logoSrc}" alt="Logo" class="logo">` : ''}
+  <div class="title-block">
+    <h2>${mosqueName}</h2>
+    <p>${mosqueAddress}</p>
+    <h3>সদস্য বাৎসরিক চাঁদা বিবরণী — ${englishToBanglaNum(selectYear.toString())} খ্রি:</h3>
+  </div>
+  <div class="serial">সদস্য নং: ${serialNo}</div>
+</div>
+<div class="info-grid">
+  <div class="info-item"><span>সদস্যের নাম:</span> ${member.name}</div>
+  <div class="info-item"><span>মোবাইল:</span> ${englishToBanglaNum(member.phone || '—')}</div>
+  <div class="info-item"><span>ঠিকানা:</span> ${member.address || '—'}</div>
+  <div class="info-item"><span>সদস্যের ধরন:</span> ${typeLabel}</div>
+  <div class="info-item"><span>পরিশোধের স্থিতি:</span> ${lastPaidMonthStr}</div>
+  <div class="info-item"><span>অগ্রিম জমা:</span> ৳ ${englishToBanglaNum(advanceVal.toFixed(2))}</div>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 15%;">মাস</th>
+      <th style="width: 15%;">ধার্যকৃত চাঁদা</th>
+      <th style="width: 15%;">আদায়কৃত</th>
+      <th style="width: 15%;">বকেয়া</th>
+      <th style="width: 22%;">পরিশোধের তারিখ</th>
+      <th style="width: 18%;">রশিদ নম্বর</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${tableRows}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td style="text-align: center;">সর্বমোট</td>
+      <td style="text-align: right;">৳ ${englishToBanglaNum((parseFloat(member.monthly_fee || 0) * 12).toFixed(0))}</td>
+      <td style="text-align: right; color: #1b5e20;">৳ ${englishToBanglaNum(totalPaidSum.toFixed(0))}</td>
+      <td style="text-align: right; color: ${totalDueSum > 0 ? '#b71c1c' : '#555'};">৳ ${englishToBanglaNum(totalDueSum.toFixed(0))}</td>
+      <td></td>
+      <td></td>
+    </tr>
+  </tfoot>
+</table>
+<div class="signatures">
+  <div class="sig-box">কোষাধ্যক্ষ</div>
+  <div class="sig-box">সাধারণ সম্পাদক</div>
+  <div class="sig-box">সভাপতি</div>
+</div>
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 800);
 }
 
 // Generate A4 Institution Monthly Report (Pad header, logo and financial summary included)
@@ -2472,84 +2552,234 @@ function handleTransactionSubmit(e) {
     alert("লেনদেনটি সফলভাবে সংরক্ষণ করা হয়েছে।");
 }
 
+// ── Report Tab State ──
+let currentReportTab = 'monthly';
+
+function switchReportTab(tab) {
+    currentReportTab = tab;
+    ['monthly','quarterly','yearly'].forEach(t => {
+        const btn = document.getElementById('rpt-tab-' + t);
+        const ctrl = document.getElementById('rpt-controls-' + t);
+        if (btn) { btn.style.background = t === tab ? 'var(--primary-color)' : 'transparent'; btn.style.color = t === tab ? '#fff' : '#555'; }
+        if (ctrl) ctrl.style.display = 'none';
+    });
+    const activeCtrl = document.getElementById('rpt-controls-' + tab);
+    if (activeCtrl) {
+        if (tab === 'quarterly') { activeCtrl.style.display = 'flex'; activeCtrl.style.flexDirection = 'column'; activeCtrl.style.gap = '8px'; }
+        else activeCtrl.style.display = 'block';
+    }
+    const btnLabel = document.getElementById('printBtnLabel');
+    if (btnLabel) {
+        const labels = { monthly: 'মাসিক বিবরণী প্রিন্ট (A4)', quarterly: 'ত্রৈমাসিক বিবরণী প্রিন্ট (A4)', yearly: 'বার্ষিক বিবরণী প্রিন্ট (A4)' };
+        btnLabel.textContent = labels[tab];
+    }
+    loadReports();
+}
+
+function getReportDateRange() {
+    if (currentReportTab === 'monthly') {
+        const m = parseInt(document.getElementById('reportMonth')?.value || (new Date().getMonth()+1));
+        const y = parseInt(document.getElementById('reportYear')?.value || new Date().getFullYear());
+        return { startMonth: m, endMonth: m, year: y };
+    }
+    if (currentReportTab === 'quarterly') {
+        const q = parseInt(document.getElementById('reportQuarter')?.value || 1);
+        const y = parseInt(document.getElementById('reportYearQ')?.value || new Date().getFullYear());
+        const qMap = { 1:[1,3], 2:[4,6], 3:[7,9], 4:[10,12] };
+        return { startMonth: qMap[q][0], endMonth: qMap[q][1], year: y };
+    }
+    const y = parseInt(document.getElementById('reportYearY')?.value || new Date().getFullYear());
+    return { startMonth: 1, endMonth: 12, year: y };
+}
+
 // Reports Loader
 function loadReports() {
-    const selectMonth = parseInt(document.getElementById('reportMonth').value);
-    const selectYear = parseInt(document.getElementById('reportYear').value);
-
-    let monthlyInc = 0;
-    let monthlyExp = 0;
+    const { startMonth, endMonth, year } = getReportDateRange();
+    let totalInc = 0, totalExp = 0;
+    let bankBal = parseFloat(state.settings.initial_bank_balance || 0);
     const breakdown = {};
 
     state.transactions.forEach(tx => {
         const parts = tx.date.split('-');
         const y = parseInt(parts[0]);
         const m = parseInt(parts[1]);
+        const val = parseFloat(tx.amount);
 
-        if (m === selectMonth && y === selectYear) {
-            const val = parseFloat(tx.amount);
-            if (tx.transaction_type === 'INCOME') {
-                monthlyInc += val;
-            } else if (tx.transaction_type === 'EXPENSE') {
-                monthlyExp += val;
-            }
+        const pm = (tx.payment_method || '').toUpperCase();
+        if (pm === 'BANK') bankBal += tx.transaction_type === 'INCOME' ? val : -val;
 
-            if (!breakdown[tx.category]) {
-                breakdown[tx.category] = { amount: 0, type: tx.transaction_type };
-            }
-            breakdown[tx.category].amount += val;
-        }
+        const inPeriod = y === year && m >= startMonth && m <= endMonth;
+        if (!inPeriod) return;
+
+        if (tx.transaction_type === 'INCOME') totalInc += val;
+        else if (tx.transaction_type === 'EXPENSE') totalExp += val;
+
+        const key = tx.category || 'other';
+        if (!breakdown[key]) breakdown[key] = { amount: 0, type: tx.transaction_type };
+        breakdown[key].amount += val;
     });
 
-    const net = monthlyInc - monthlyExp;
-
-    document.getElementById('reportTotalIncome').innerText = formatCurrency(monthlyInc);
-    document.getElementById('reportTotalExpense').innerText = formatCurrency(monthlyExp);
-    
+    const net = totalInc - totalExp;
+    document.getElementById('reportTotalIncome').innerText = formatCurrency(totalInc);
+    document.getElementById('reportTotalExpense').innerText = formatCurrency(totalExp);
+    const bankEl = document.getElementById('reportBankBalance');
+    if (bankEl) bankEl.innerText = formatCurrency(Math.max(0, bankBal));
     const netEl = document.getElementById('reportNetBalance');
-    netEl.innerText = `${net >= 0 ? '+' : '-'}৳ ${formatCurrency(Math.abs(net))}`;
-    netEl.className = net >= 0 ? 'text-success' : 'text-danger';
-    if (net < 0) netEl.style.color = 'var(--danger-color)';
+    if (netEl) { netEl.innerText = (net >= 0 ? '+' : '-') + 'টাকা ' + formatCurrency(Math.abs(net)); netEl.style.color = net >= 0 ? '#4a148c' : '#b71c1c'; }
 
     const incList = document.getElementById('categoryBreakdownIncomeList');
     const expList = document.getElementById('categoryBreakdownExpenseList');
     if (incList && expList) {
-        incList.innerHTML = '';
-        expList.innerHTML = '';
-
-        const sortedCats = Object.keys(breakdown).sort((a,b) => breakdown[b].amount - breakdown[a].amount);
-        
-        let hasIncome = false;
-        let hasExpense = false;
-
-        sortedCats.forEach(cat => {
+        incList.innerHTML = ''; expList.innerHTML = '';
+        let hasInc = false, hasExp = false;
+        Object.keys(breakdown).sort((a,b) => breakdown[b].amount - breakdown[a].amount).forEach(cat => {
             const data = breakdown[cat];
             const row = document.createElement('div');
-            row.className = 'summary-item';
-            row.style.marginBottom = '6px';
-            row.innerHTML = `
-                <span>${CATEGORIES_BN[cat] || cat}</span>
-                <span class="${data.type === 'INCOME' ? 'text-success' : 'text-danger'}" style="${data.type === 'EXPENSE' ? 'color:var(--danger-color);' : ''}">
-                    ${data.type === 'INCOME' ? '+' : '-'}৳ ${englishToBanglaNum(data.amount.toString())}
-                </span>
-            `;
-            
-            if (data.type === 'INCOME') {
-                incList.appendChild(row);
-                hasIncome = true;
-            } else {
-                expList.appendChild(row);
-                hasExpense = true;
-            }
+            row.className = 'summary-item'; row.style.marginBottom = '6px';
+            row.innerHTML = `<span style="font-size:11px;">${CATEGORIES_BN[cat] || cat}</span><span style="font-size:11px;font-weight:700;color:${data.type==='INCOME'?'#2e7d32':'var(--danger-color)'};">${data.type==='INCOME'?'+':'-'}৳ ${formatCurrency(data.amount)}</span>`;
+            if (data.type === 'INCOME') { incList.appendChild(row); hasInc = true; }
+            else { expList.appendChild(row); hasExp = true; }
         });
-
-        if (!hasIncome) {
-            incList.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:10px;font-size:11px;">কোনো আয় নেই</div>';
-        }
-        if (!hasExpense) {
-            expList.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:10px;font-size:11px;">কোনো ব্যয় নেই</div>';
-        }
+        if (!hasInc) incList.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:10px;font-size:11px;">কোনো আয় নেই</div>';
+        if (!hasExp) expList.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:10px;font-size:11px;">কোনো ব্যয় নেই</div>';
     }
+}
+
+function generateAdvancedPrintReport() {
+    const { startMonth, endMonth, year } = getReportDateRange();
+    const MN = ['','জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
+    const QN = {1:'১ম ত্রৈমাসিক (জানুয়ারি–মার্চ)',2:'২য় ত্রৈমাসিক (এপ্রিল–জুন)',3:'৩য় ত্রৈমাসিক (জুলাই–সেপ্টেম্বর)',4:'৪র্থ ত্রৈমাসিক (অক্টোবর–ডিসেম্বর)'};
+    let periodLabel = '';
+    if (currentReportTab === 'monthly') periodLabel = MN[startMonth] + ' ' + englishToBanglaNum(year.toString()) + ' খ্রি:';
+    else if (currentReportTab === 'quarterly') { const q = parseInt(document.getElementById('reportQuarter')?.value||1); periodLabel = QN[q] + ' — ' + englishToBanglaNum(year.toString()) + ' খ্রি:'; }
+    else periodLabel = 'বার্ষিক বিবরণী — ' + englishToBanglaNum(year.toString()) + ' খ্রি:';
+
+    let totalInc = 0, totalExp = 0, prevInc = 0, prevExp = 0;
+    let bankBal = parseFloat(state.settings.initial_bank_balance || 0);
+    let cashBal = parseFloat(state.settings.initial_cash_balance || 0);
+    const incList = [], expList = [];
+
+    state.transactions.forEach(tx => {
+        const parts = tx.date.split('-');
+        const y = parseInt(parts[0]), m = parseInt(parts[1]);
+        const val = parseFloat(tx.amount);
+        const pm = (tx.payment_method || '').toUpperCase();
+        const inPeriod = y === year && m >= startMonth && m <= endMonth;
+        const before = y < year || (y === year && m < startMonth);
+
+        if (pm === 'BANK') bankBal += tx.transaction_type === 'INCOME' ? val : -val;
+        else cashBal += tx.transaction_type === 'INCOME' ? val : -val;
+
+        if (before) { if (tx.transaction_type === 'INCOME') prevInc += val; else prevExp += val; }
+        if (!inPeriod) return;
+        const desc = tx.description || CATEGORIES_BN[tx.category] || tx.category || '';
+        const method = pm === 'BANK' ? 'ব্যাংক' : 'নগদ';
+        if (tx.transaction_type === 'INCOME') { totalInc += val; incList.push({ date: tx.date, description: desc, amount: val, method }); }
+        else if (tx.transaction_type === 'EXPENSE') { totalExp += val; expList.push({ date: tx.date, description: desc, amount: val, method }); }
+    });
+
+    incList.sort((a,b) => new Date(a.date)-new Date(b.date));
+    expList.sort((a,b) => new Date(a.date)-new Date(b.date));
+    const net = totalInc - totalExp;
+    const prevBal = parseFloat(state.settings.initial_bank_balance||0) + parseFloat(state.settings.initial_cash_balance||0) + prevInc - prevExp;
+    const closingBal = prevBal + net;
+    const maxRows = Math.max(incList.length, expList.length);
+
+    let tRows = '';
+    for (let i = 0; i < maxRows; i++) {
+        const inc = incList[i], exp = expList[i];
+        tRows += `<tr>
+            <td>${inc ? formatShortDateBN(inc.date) : ''}</td>
+            <td style="text-align:left;">${inc ? inc.description : ''}</td>
+            <td style="text-align:center;">${inc ? inc.method : ''}</td>
+            <td style="text-align:right;">${inc ? '৳ '+englishToBanglaNum(inc.amount.toFixed(2)) : ''}</td>
+            <td style="background:#ccc;width:3px;padding:0;border-top:1px solid #555;border-bottom:1px solid #555;border-left:none;border-right:none;"></td>
+            <td>${exp ? formatShortDateBN(exp.date) : ''}</td>
+            <td style="text-align:left;">${exp ? exp.description : ''}</td>
+            <td style="text-align:center;">${exp ? exp.method : ''}</td>
+            <td style="text-align:right;">${exp ? '৳ '+englishToBanglaNum(exp.amount.toFixed(2)) : ''}</td>
+        </tr>`;
+    }
+    if (!maxRows) tRows = '<tr><td colspan="9" style="text-align:center;padding:20px;color:#888;">এই সময়কালে কোনো আর্থিক লেনদেন সম্পন্ন হয়নি।</td></tr>';
+
+    const logoSrc = state.settings.logoData || '';
+    const mosqueN = state.settings.mosqueName || 'মসজিদের নাম';
+    const mosqueA = state.settings.address || '';
+    const todayStr = new Date().toLocaleDateString('bn-BD', {year:'numeric',month:'long',day:'numeric'});
+
+    const pw = window.open('', '_blank', 'width=960,height=720');
+    if (!pw) { alert('পপ-আপ ব্লক হয়েছে। অনুগ্রহ করে অনুমতি দিন।'); return; }
+
+    pw.document.write(`<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8">
+<title>${mosqueN} - ${periodLabel}</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Hind Siliguri',Arial,sans-serif;font-size:12px;color:#000;background:#fff;}
+@page{size:A4;margin:12mm 12mm 15mm 12mm;}
+.ph{display:flex;align-items:center;position:relative;border-bottom:3px double #000;padding-bottom:10px;margin-bottom:14px;min-height:85px;}
+.logo{position:absolute;left:0;top:0;width:72px;height:72px;object-fit:contain;}
+.tb{text-align:center;flex:1;}
+.tb h1{font-size:18px;font-weight:800;margin-bottom:3px;}
+.tb p{font-size:11px;color:#444;margin-bottom:2px;}
+.tb h2{font-size:14px;font-weight:700;margin-top:5px;border-bottom:1px solid #555;display:inline-block;padding-bottom:2px;}
+.tb .per{font-size:13px;font-weight:700;margin-top:4px;}
+.pdate{position:absolute;right:0;top:0;font-size:10px;color:#555;text-align:right;}
+.sstrip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.sb{border:1px solid #ccc;border-radius:6px;padding:8px 6px;text-align:center;}
+.sb .sl{font-size:10px;color:#666;margin-bottom:3px;}
+.sb .sv{font-size:13px;font-weight:800;}
+.sb.inc{border-color:#2e7d32;background:#f1f8f1;}
+.sb.exp{border-color:#b71c1c;background:#fff5f5;}
+.sb.bnk{border-color:#1565c0;background:#f0f6ff;}
+.sb.net{border-color:#6a1b9a;background:#faf0ff;}
+.ezarow{background:#fffde7;border:1px dashed #f9a825;border-radius:6px;padding:7px 12px;margin-bottom:12px;font-size:11px;display:flex;justify-content:space-between;align-items:center;}
+table{width:100%;border-collapse:collapse;margin-bottom:14px;}
+th,td{border:1px solid #555;padding:5px 4px;vertical-align:middle;}
+thead tr:first-child{background:#fff;}
+thead tr:last-child th{background:#f5f5f5;font-size:11px;}
+.inc-head{background:#c8e6c9!important;}
+.exp-head{background:#ffcdd2!important;}
+tbody tr:nth-child(even){background:#f9f9f9;}
+.tfrow td{background:#e0e0e0;font-weight:800;font-size:12px;}
+.bnksec{border:1px solid #1565c0;border-radius:6px;background:#f0f6ff;padding:10px 14px;margin-bottom:14px;}
+.bnksec h4{font-size:12px;font-weight:800;color:#1565c0;margin-bottom:6px;border-bottom:1px solid #90caf9;padding-bottom:4px;}
+.br{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;}
+.clsbox{background:#f3e5f5;border:2px solid #6a1b9a;border-radius:8px;padding:10px 14px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;}
+.sigs{display:flex;justify-content:space-between;margin-top:35px;}
+.sig{text-align:center;width:150px;border-top:1px solid #000;padding-top:5px;font-size:11px;font-weight:700;}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+</style></head><body>
+<div class="ph">
+${logoSrc?`<img src="${logoSrc}" alt="logo" class="logo">`:''}
+<div class="tb"><h1>${mosqueN}</h1><p>${mosqueA}</p><h2>আয়-ব্যয় বিবরণী</h2><div class="per">${periodLabel}</div></div>
+<div class="pdate">প্রকাশ তারিখ:<br>${todayStr}</div>
+</div>
+<div class="sstrip">
+<div class="sb inc"><div class="sl">মোট আয়</div><div class="sv">৳ ${englishToBanglaNum(totalInc.toFixed(2))}</div></div>
+<div class="sb exp"><div class="sl">মোট ব্যয়</div><div class="sv">৳ ${englishToBanglaNum(totalExp.toFixed(2))}</div></div>
+<div class="sb bnk"><div class="sl">ব্যাংক জমা</div><div class="sv">৳ ${englishToBanglaNum(Math.max(0,bankBal).toFixed(2))}</div></div>
+<div class="sb net"><div class="sl">নিট উদ্বৃত্ত</div><div class="sv" style="color:${net>=0?'#2e7d32':'#b71c1c'};">${net>=0?'+':'-'}৳ ${englishToBanglaNum(Math.abs(net).toFixed(2))}</div></div>
+</div>
+<div class="ezarow"><span>পূর্ববর্তী জের (ঈজা):</span><span>৳ ${englishToBanglaNum(prevBal.toFixed(2))}</span></div>
+<table>
+<thead>
+<tr><th colspan="4" class="inc-head" style="font-size:12px;font-weight:800;text-align:center;border-bottom:2px solid #2e7d32;">আয় (Income)</th><th style="background:#ccc;width:3px;padding:0;"></th><th colspan="4" class="exp-head" style="font-size:12px;font-weight:800;text-align:center;border-bottom:2px solid #c62828;">ব্যয় (Expense)</th></tr>
+<tr><th style="width:9%;text-align:center;">তারিখ</th><th style="width:21%;text-align:left;">বিবরণ</th><th style="width:7%;text-align:center;">মাধ্যম</th><th style="width:10%;text-align:right;">পরিমাণ</th><th style="width:2%;background:#ccc;padding:0;"></th><th style="width:9%;text-align:center;">তারিখ</th><th style="width:21%;text-align:left;">বিবরণ</th><th style="width:7%;text-align:center;">মাধ্যম</th><th style="width:10%;text-align:right;">পরিমাণ</th></tr>
+</thead>
+<tbody>${tRows}</tbody>
+<tfoot><tr class="tfrow"><td colspan="3" style="text-align:right;border:1px solid #555;">সর্বমোট আয়</td><td style="text-align:right;border:1px solid #555;color:#1b5e20;">৳ ${englishToBanglaNum(totalInc.toFixed(2))}</td><td style="background:#bbb;padding:0;"></td><td colspan="3" style="text-align:right;border:1px solid #555;">সর্বমোট ব্যয়</td><td style="text-align:right;border:1px solid #555;color:#b71c1c;">৳ ${englishToBanglaNum(totalExp.toFixed(2))}</td></tr></tfoot>
+</table>
+<div class="bnksec">
+<h4>&#127974; ব্যাংক ও নগদ হিসাব সারসংক্ষেপ</h4>
+<div class="br"><span>প্রাথমিক ব্যাংক ব্যালেন্স:</span><span>৳ ${englishToBanglaNum(parseFloat(state.settings.initial_bank_balance||0).toFixed(2))}</span></div>
+<div class="br"><span>বর্তমান ব্যাংক জমা:</span><span style="font-weight:700;color:#1565c0;">৳ ${englishToBanglaNum(Math.max(0,bankBal).toFixed(2))}</span></div>
+<div class="br"><span>বর্তমান নগদ জমা:</span><span style="font-weight:700;color:#e65100;">৳ ${englishToBanglaNum(Math.max(0,cashBal).toFixed(2))}</span></div>
+</div>
+<div class="clsbox"><span style="font-size:12px;font-weight:700;color:#4a148c;">সমাপ্তি উদ্বৃত্ত (Closing Balance):</span><span style="font-size:16px;font-weight:900;color:${closingBal>=0?'#4a148c':'#b71c1c'};">${closingBal>=0?'':'-'}৳ ${englishToBanglaNum(Math.abs(closingBal).toFixed(2))}</span></div>
+<div class="sigs"><div class="sig">কোষাধ্যক্ষ</div><div class="sig">সাধারণ সম্পাদক</div><div class="sig">সভাপতি</div></div>
+</body></html>`);
+    pw.document.close(); pw.focus(); setTimeout(() => pw.print(), 900);
 }
 
 // ================== COMMITTEE & WAIVER ADDITIONS ==================
@@ -2872,13 +3102,13 @@ function handleWaiverSubmit(e) {
     }
     
     let remainingWaiver = waiverAmount;
-    const currentYear = 2026;
     const now = new Date();
+    const currentYear = now.getFullYear();
     const currentMonthLimit = now.getMonth() + 1;
     
-    const joinParts = member.join_date.split('-');
-    const joinYear = parseInt(joinParts[0]);
-    const joinMonth = parseInt(joinParts[1]);
+    const joinParts = (member.join_date || '2025-01-01').split('-');
+    const joinYear = parseInt(joinParts[0]) || 2025;
+    const joinMonth = parseInt(joinParts[1]) || 1;
     
     // Allocate waiver amount as subscription fee reductions chronologically
     for (let year = joinYear; year <= currentYear && remainingWaiver > 0; year++) {
@@ -3214,7 +3444,7 @@ function handleBulkImport(e) {
 
             let importCount = 0;
             let skipCount = 0;
-            const currentYear = 2026;
+            const currentYear = new Date().getFullYear();
             const defaultMonthlyFee = 150; // Standard general member monthly fee
 
             for (let i = 1; i < rows.length; i++) {
@@ -3794,11 +4024,105 @@ function generateAllMembersKhata() {
         htmlContent += memberHtml;
     });
     
-    khataContainer.innerHTML = htmlContent;
-    
-    // Trigger print
-    document.body.classList.add('print-active-khata');
-    triggerPrint('printableKhataArea', 'Aday_Khata_' + selectedYear, 'print-active-khata');
+    // ── Open a clean A4 print window (no mobile-frame influence) ──
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+        alert("পপ-আপ ব্লক করা আছে। অনুগ্রহ করে ব্রাউজারে এই সাইটের জন্য পপ-আপ অনুমতি দিন এবং আবার চেষ্টা করুন।");
+        return;
+    }
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <title>আদায় খাতা - ${englishToBanglaNum(selectedYear.toString())} খ্রি:</title>
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Hind Siliguri', 'SolaimanLipi', Arial, sans-serif;
+            font-size: 13px;
+            color: #000;
+            background: #fff;
+        }
+        @page { size: A4 portrait; margin: 15mm 15mm 20mm 15mm; }
+
+        .khata-page {
+            width: 100%;
+            page-break-after: always;
+            padding: 0;
+        }
+        .khata-page:last-child { page-break-after: auto; }
+
+        .khata-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            position: relative;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+            min-height: 80px;
+        }
+        .khata-logo {
+            position: absolute; left: 0; top: 0;
+            width: 68px; height: 68px; object-fit: contain;
+        }
+        .khata-title-block { text-align: center; }
+        .khata-title-block h2 { font-size: 20px; font-weight: 700; margin-bottom: 3px; }
+        .khata-title-block p { font-size: 12px; color: #444; margin-bottom: 3px; }
+        .khata-title-block h3 {
+            font-size: 16px; font-weight: 700; margin-bottom: 4px;
+            border-bottom: 1px solid #555; display: inline-block; padding-bottom: 2px;
+        }
+        .year-text { font-size: 14px; font-weight: 700; color: #000; }
+        .khata-serial {
+            position: absolute; right: 0; top: 0;
+            font-size: 13px; font-weight: 700;
+            border: 1px solid #000; padding: 4px 10px; border-radius: 4px;
+        }
+
+        .khata-member-info {
+            display: flex; justify-content: space-between;
+            font-size: 14px; margin-bottom: 10px;
+            padding: 6px 0; border-bottom: 1px dashed #888;
+        }
+
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        th, td {
+            border: 1px solid #000; padding: 6px 4px;
+            text-align: center; vertical-align: middle; word-wrap: break-word;
+        }
+        thead tr { background-color: #d6e4d6; }
+        th { font-size: 12px; font-weight: 700; }
+        tbody tr:nth-child(even) { background-color: #f9f9f9; }
+        .total-row { background-color: #e8e8e8 !important; font-weight: 700; }
+
+        .khata-footer {
+            margin-top: 18px; font-size: 13px; line-height: 1.9;
+            border-top: 1px dashed #888; padding-top: 10px;
+        }
+        .khata-signatures {
+            display: flex; justify-content: space-between; margin-top: 40px;
+        }
+        .sig-box {
+            text-align: center; width: 160px;
+            border-top: 1px solid #000; padding-top: 5px;
+            font-size: 13px; font-weight: 700;
+        }
+        @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+${htmlContent}
+</body>
+</html>`);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); }, 900);
 }
 
 // ==========================================
@@ -3857,7 +4181,7 @@ function printAllMembersList() {
     let tableRows = '';
     let totalDues = 0;
 
-    filteredMembers.forEach((m, idx) => {
+    filteredMembers.forEach((m) => {
         const realIndex = state.members.findIndex(member => member.id === m.id) + 1;
         const displayNum = String(realIndex).padStart(2, '0');
         const dueAmount = calculateMemberTotalDue(m.id);
@@ -3868,61 +4192,94 @@ function printAllMembersList() {
         else if (m.member_type === 'Free') typeLabel = 'ফ্রি';
 
         tableRows += `
-            <tr style="border-bottom: 1px solid #ddd;">
-                <td style="padding: 10px; text-align: center; font-size: 13px; border: 1px solid #000;">${englishToBanglaNum(displayNum)}</td>
-                <td style="padding: 10px; font-size: 13px; font-weight: bold; border: 1px solid #000;">${m.name}</td>
-                <td style="padding: 10px; text-align: center; font-size: 13px; border: 1px solid #000;">${typeLabel}</td>
-                <td style="padding: 10px; text-align: center; font-size: 13px; border: 1px solid #000;">${englishToBanglaNum(m.phone || '—')}</td>
-                <td style="padding: 10px; text-align: right; font-size: 13px; font-weight: bold; border: 1px solid #000; color: ${dueAmount > 0 ? '#b02a37' : '#0f5132'};">
-                    ৳ ${englishToBanglaNum(dueAmount.toString())}
+            <tr>
+                <td style="text-align: center;">${englishToBanglaNum(displayNum)}</td>
+                <td style="text-align: left; font-weight: bold;">${m.name}</td>
+                <td style="text-align: center;">${typeLabel}</td>
+                <td style="text-align: center;">${englishToBanglaNum(m.phone || '—')}</td>
+                <td style="text-align: right; font-weight: bold; color: ${dueAmount > 0 ? '#b71c1c' : '#1b5e20'};">
+                    ৳ ${englishToBanglaNum(dueAmount.toFixed(0))}
                 </td>
             </tr>
         `;
     });
 
     const printDate = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
+    const logoSrc = state.settings.logoData || '';
+    const mosqueName = state.settings.mosqueName || 'মসজিদের নাম';
+    const mosqueAddress = state.settings.address || '';
 
-    printContainer.innerHTML = `
-        <div style="padding: 30px; font-family: 'Inter', 'Hind Siliguri', sans-serif;">
-            <div class="print-pad-header" style="text-align: center; margin-bottom: 30px;">
-                <h2 style="font-size: 26px; color: #0f5132; margin: 0 0 5px 0; font-weight: bold;">${state.settings.mosqueName || 'বাইতুল মামুর মসজিদ'}</h2>
-                <p style="font-size: 13px; color: #666; margin: 0 0 5px 0;">${state.settings.mosqueAddress || 'প্রতিষ্ঠানের ঠিকানা'}</p>
-                <div style="height: 2px; background: #0f5132; margin: 15px auto; width: 60%;"></div>
-                <h3 style="font-size: 18px; font-weight: bold; margin: 5px 0;">সদস্য তালিকা (${filterText})</h3>
-                <p style="font-size: 12px; color: #777;">প্রিন্ট তারিখ: ${printDate}</p>
-            </div>
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) { alert("পপ-আপ ব্লক করা আছে। অনুগ্রহ করে ব্রাউজারে অনুমতি দিন।"); return; }
 
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; border: 1.5px solid #000;">
-                <thead>
-                    <tr style="background-color: #f2f2f2; border-bottom: 2px solid #000;">
-                        <th style="padding: 12px 10px; font-size: 13px; border: 1px solid #000; width: 12%;">সদস্য নং</th>
-                        <th style="padding: 12px 10px; font-size: 13px; border: 1px solid #000; text-align: left;">সদস্যের নাম</th>
-                        <th style="padding: 12px 10px; font-size: 13px; border: 1px solid #000; width: 15%;">ক্যাটাগরি</th>
-                        <th style="padding: 12px 10px; font-size: 13px; border: 1px solid #000; width: 22%;">মোবাইল নম্বর</th>
-                        <th style="padding: 12px 10px; font-size: 13px; border: 1px solid #000; width: 20%; text-align: right;">বকেয়া চাঁদা</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${tableRows}
-                    <tr style="background-color: #f8f9fa; font-weight: bold; border-top: 2px solid #000;">
-                        <td colspan="4" style="padding: 12px 10px; text-align: right; font-size: 13px; border: 1px solid #000;">সর্বমোট বকেয়া পরিমাণ:</td>
-                        <td style="padding: 12px 10px; text-align: right; font-size: 14px; border: 1px solid #000; color: #b02a37;">
-                            ৳ ${englishToBanglaNum(totalDues.toString())}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div style="display: flex; justify-content: space-between; margin-top: 80px; padding: 0 20px; font-size: 13px; font-weight: bold;">
-                <div style="text-align: center; border-top: 1px dashed #000; width: 150px; padding-top: 6px;">কোষাধ্যক্ষ</div>
-                <div style="text-align: center; border-top: 1px dashed #000; width: 150px; padding-top: 6px;">সাধারণ সম্পাদক</div>
-                <div style="text-align: center; border-top: 1px dashed #000; width: 150px; padding-top: 6px;">সভাপতি</div>
-            </div>
-        </div>
-    `;
-
-    document.body.classList.add('print-active-memberslist');
-    triggerPrint('printableAllMembersArea', 'Members_List', 'print-active-memberslist');
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<title>${mosqueName} — সদস্য তালিকা (${filterText})</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Hind Siliguri', Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
+  @page { size: A4 portrait; margin: 15mm 15mm 20mm 15mm; }
+  .header { display: flex; align-items: flex-start; justify-content: center; position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 14px; min-height: 75px; }
+  .logo { position: absolute; left: 0; top: 0; width: 68px; height: 68px; object-fit: contain; }
+  .title-block { text-align: center; }
+  .title-block h2 { font-size: 20px; font-weight: 700; margin-bottom: 3px; }
+  .title-block p { font-size: 12px; color: #444; margin-bottom: 3px; }
+  .title-block h3 { font-size: 15px; font-weight: 700; margin-top: 4px; border-bottom: 1px solid #555; display: inline-block; padding-bottom: 2px; }
+  .print-date { position: absolute; right: 0; top: 0; font-size: 11px; color: #555; text-align: right; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  th, td { border: 1px solid #000; padding: 8px 6px; vertical-align: middle; }
+  thead tr { background-color: #d6e4d6; }
+  th { font-size: 12px; font-weight: 700; text-align: center; }
+  tbody tr:nth-child(even) { background-color: #f9f9f9; }
+  tfoot tr { background-color: #e8e8e8; font-weight: 700; }
+  .signatures { display: flex; justify-content: space-between; margin-top: 50px; }
+  .sig-box { text-align: center; width: 160px; border-top: 1px solid #000; padding-top: 5px; font-size: 13px; font-weight: 700; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<div class="header">
+  ${logoSrc ? `<img src="${logoSrc}" alt="Logo" class="logo">` : ''}
+  <div class="title-block">
+    <h2>${mosqueName}</h2>
+    <p>${mosqueAddress}</p>
+    <h3>সদস্য তালিকা (${filterText})</h3>
+  </div>
+  <div class="print-date">প্রিন্ট তারিখ:<br>${printDate}</div>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 12%;">সদস্য নং</th>
+      <th style="width: 32%; text-align: left;">সদস্যের নাম</th>
+      <th style="width: 16%;">ক্যাটাগরি</th>
+      <th style="width: 22%;">মোবাইল নম্বর</th>
+      <th style="width: 18%; text-align: right;">বকেয়া চাঁদা</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${tableRows}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="4" style="text-align: right;">সর্বমোট বকেয়া পরিমাণ:</td>
+      <td style="text-align: right; color: #b71c1c; font-size: 14px;">৳ ${englishToBanglaNum(totalDues.toFixed(0))}</td>
+    </tr>
+  </tfoot>
+</table>
+<div class="signatures">
+  <div class="sig-box">কোষাধ্যক্ষ</div>
+  <div class="sig-box">সাধারণ সম্পাদক</div>
+  <div class="sig-box">সভাপতি</div>
+</div>
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 800);
 }
 
 // ==========================================

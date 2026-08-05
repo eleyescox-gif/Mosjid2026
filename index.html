@@ -278,14 +278,19 @@
 
             <!-- ================== 4. REPORTS VIEW ================== -->
             <section id="reports-view" class="app-view">
-                <div class="section-header">
-                    <h3>মাসিক প্রতিবেদন ও বিবরণী</h3>
+
+                <!-- Report Type Tabs -->
+                <div style="display: flex; gap: 0; background: #f0f4f0; border-radius: 12px; padding: 4px; margin-bottom: 14px;">
+                    <button id="rpt-tab-monthly" onclick="switchReportTab('monthly')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: var(--primary-color); color: #fff; transition: all .2s;">মাসিক</button>
+                    <button id="rpt-tab-quarterly" onclick="switchReportTab('quarterly')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: transparent; color: #555; transition: all .2s;">ত্রৈমাসিক</button>
+                    <button id="rpt-tab-yearly" onclick="switchReportTab('yearly')" style="flex:1; padding: 8px 4px; border-radius: 9px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; background: transparent; color: #555; transition: all .2s;">বার্ষিক</button>
                 </div>
 
-                <div class="report-period-selector">
+                <!-- Monthly Controls -->
+                <div id="rpt-controls-monthly" class="report-period-selector" style="display: flex;">
                     <select id="reportMonth" class="form-control" onchange="loadReports()">
-                        <option value="1">জানুয়ারি</option>
-                        <option value="2">ফেব্রুয়ারি</option>
+                        <option value="1">জানুয়ারি</option>
+                        <option value="2">ফেব্রুয়ারি</option>
                         <option value="3">মার্চ</option>
                         <option value="4">এপ্রিল</option>
                         <option value="5">মে</option>
@@ -298,38 +303,66 @@
                         <option value="12">ডিসেম্বর</option>
                     </select>
                     <select id="reportYear" class="form-control" onchange="loadReports()">
-                        <option value="2026">২০২৬</option>
+                        <option value="2024">২০২৪</option>
+                        <option value="2025">২০২৫</option>
+                        <option value="2026" selected>২০২৬</option>
+                        <option value="2027">২০২৭</option>
+                        <option value="2028">২০২৮</option>
+                    </select>
+                </div>
+
+                <!-- Quarterly Controls -->
+                <div id="rpt-controls-quarterly" style="display: none; gap: 8px; margin-bottom: 12px;">
+                    <select id="reportQuarter" class="form-control" onchange="loadReports()" style="margin-bottom: 0;">
+                        <option value="1">১ম ত্রৈমাসিক (জানু–মার্চ)</option>
+                        <option value="2">২য় ত্রৈমাসিক (এপ্রিল–জুন)</option>
+                        <option value="3">৩য় ত্রৈমাসিক (জুলাই–সেপ্টে)</option>
+                        <option value="4">৪র্থ ত্রৈমাসিক (অক্টো–ডিসে)</option>
+                    </select>
+                    <select id="reportYearQ" class="form-control" onchange="loadReports()" style="margin-bottom: 0;">
+                        <option value="2024">২০২৪</option>
+                        <option value="2025">২০২৫</option>
+                        <option value="2026" selected>২০২৬</option>
                         <option value="2027">২০২৭</option>
                     </select>
                 </div>
 
+                <!-- Yearly Controls -->
+                <div id="rpt-controls-yearly" style="display: none; margin-bottom: 12px;">
+                    <select id="reportYearY" class="form-control" onchange="loadReports()">
+                        <option value="2024">২০২৪</option>
+                        <option value="2025">২০২৫</option>
+                        <option value="2026" selected>২০২৬</option>
+                        <option value="2027">২০২৭</option>
+                    </select>
+                </div>
 
-
-                <div class="chart-card">
-                    <div class="chart-title">আর্থিক বিবরণী</div>
-                    <div class="summary-list">
-                        <div class="summary-item">
-                            <span>মোট আয়</span>
-                            <span class="text-success">৳ <span id="reportTotalIncome">0.00</span></span>
-                        </div>
-                        <div class="summary-item">
-                            <span>মোট ব্যয়</span>
-                            <span class="text-danger" style="color: var(--danger-color);">৳ <span id="reportTotalExpense">0.00</span></span>
-                        </div>
-                        <div class="summary-item" style="border-bottom: none; font-weight: bold;">
-                            <span>নিট উদ্বৃত্ত</span>
-                            <span id="reportNetBalance">৳ 0.00</span>
-                        </div>
+                <!-- Summary Cards -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                    <div style="background: linear-gradient(135deg, #e8f5e9, #c8e6c9); border-radius: 12px; padding: 12px; border-left: 4px solid #2e7d32;">
+                        <div style="font-size: 10px; color: #555; margin-bottom: 4px;">মোট আয়</div>
+                        <div style="font-size: 15px; font-weight: 800; color: #1b5e20;">৳ <span id="reportTotalIncome">০.০০</span></div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #fce4ec, #ffcdd2); border-radius: 12px; padding: 12px; border-left: 4px solid #c62828;">
+                        <div style="font-size: 10px; color: #555; margin-bottom: 4px;">মোট ব্যয়</div>
+                        <div style="font-size: 15px; font-weight: 800; color: #b71c1c;">৳ <span id="reportTotalExpense">০.০০</span></div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #e3f2fd, #bbdefb); border-radius: 12px; padding: 12px; border-left: 4px solid #1565c0;">
+                        <div style="font-size: 10px; color: #555; margin-bottom: 4px;">ব্যাংক জমা</div>
+                        <div style="font-size: 15px; font-weight: 800; color: #0d47a1;">৳ <span id="reportBankBalance">০.০০</span></div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #f3e5f5, #e1bee7); border-radius: 12px; padding: 12px; border-left: 4px solid #6a1b9a;">
+                        <div style="font-size: 10px; color: #555; margin-bottom: 4px;">নিট উদ্বৃত্ত</div>
+                        <div style="font-size: 15px; font-weight: 800;" id="reportNetBalance">+৳ ০.০০</div>
                     </div>
                 </div>
 
-                <div class="section-header">
-                    <h3>খাতভিত্তিক বিবরণ</h3>
-                </div>
-                <div class="reports-breakdown-grid" id="categoryBreakdownContainer" style="margin-bottom: 20px;">
+                <!-- Category Breakdown -->
+                <div class="section-header" style="margin-bottom: 8px;"><h3>খাতভিত্তিক বিবরণ</h3></div>
+                <div class="reports-breakdown-grid" id="categoryBreakdownContainer" style="margin-bottom: 14px;">
                     <div class="reports-breakdown-col">
                         <div class="col-header col-header-income">
-                            <i class="fa-solid fa-circle-arrow-down"></i> আয়
+                            <i class="fa-solid fa-circle-arrow-down"></i> আয়
                         </div>
                         <div class="list-container" id="categoryBreakdownIncomeList" style="margin-bottom: 0; box-shadow: none; border: 1px solid var(--border-color); border-radius: 12px; padding: 8px;"></div>
                     </div>
@@ -1128,7 +1161,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Main JavaScript App -->
-    <script src="app.js?v=2026.08.03.10"></script>
+    <script src="app.js?v=2026.08.05.3"></script>
     <script type="module" src="firebase-db.js?v=2"></script>
     <script>
         if ('serviceWorker' in navigator) {
