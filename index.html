@@ -834,11 +834,16 @@
                 </form>
             </div>
 
-            <!-- 4. Secretary/Admin Arrears Adjustment Panel -->
-            <div id="secretaryArrearsPanel" class="chart-card" style="display: none; border: 1.5px solid var(--primary-color); background: var(--primary-light)08; margin-bottom: 20px;">
-                <div class="chart-title" style="margin-bottom: 12px; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
-                    <span>বকেয়া টাকা বৃদ্ধি/হ্রাস (সম্পাদক/এডমিন)</span>
-                    <i class="fa-solid fa-scale-balanced" style="color: var(--primary-color);"></i>
+            <!-- 4. Secretary/Admin Arrears Adjustment Trigger Button & Collapsible Panel -->
+            <button id="toggleArrearsPanelBtn" type="button" class="btn btn-secondary" onclick="toggleArrearsAdjustmentPanel()" style="display: none; width: 100%; margin-bottom: 14px; background: #f4faf6; border: 1.5px solid var(--primary-color); color: var(--primary-color); font-weight: 700; font-size: 12px; height: 40px; border-radius: 9px; justify-content: space-between; align-items: center; padding: 0 14px; transition: all 0.2s; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                <span><i class="fa-solid fa-scale-balanced"></i> বকেয়া টাকা বৃদ্ধি/হ্রাস (সম্পাদক/এডমিন)</span>
+                <i id="adjToggleIcon" class="fa-solid fa-chevron-down"></i>
+            </button>
+
+            <div id="secretaryArrearsPanel" class="chart-card" style="display: none; border: 1.5px solid var(--primary-color); background: #ffffff; margin-bottom: 20px; padding: 14px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
+                <div class="chart-title" style="margin-bottom: 12px; font-size: 13px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; color: var(--primary-color); border-bottom: 1px dashed #c8e6c9; padding-bottom: 8px;">
+                    <span><i class="fa-solid fa-scale-balanced"></i> বকেয়া টাকা বৃদ্ধি/হ্রাস (সমন্বয় ফরম)</span>
+                    <button type="button" onclick="toggleArrearsAdjustmentPanel()" style="background: none; border: none; font-size: 14px; color: #888; cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <form id="arrearsAdjustmentForm" onsubmit="handleArrearsAdjustmentSubmit(event)">
                     <input type="hidden" id="adjMemberId">
@@ -862,7 +867,7 @@
                         <label for="adjReason">সমন্বয়ের কারণ/মন্তব্য *</label>
                         <input type="text" id="adjReason" class="form-control" placeholder="যেমন: ভুল এন্ট্রি সংশোধন বা বিগত বছরের বকেয়া" required style="font-size: 12px; padding: 8px;">
                     </div>
-                    <button type="submit" class="btn btn-primary" style="height: 38px; font-size: 12px;">
+                    <button type="submit" class="btn btn-primary" style="height: 38px; font-size: 12px; width: 100%;">
                         <i class="fa-solid fa-circle-check"></i> সমন্বয় নিশ্চিত করুন
                     </button>
                 </form>
@@ -1186,7 +1191,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Main JavaScript App -->
-    <script src="app.js?v=2026.08.06.2"></script>
+    <script src="app.js?v=2026.08.06.4"></script>
     <script type="module" src="firebase-db.js?v=2"></script>
     <script>
         if ('serviceWorker' in navigator) {

@@ -1645,6 +1645,21 @@ function handleNewMemberSubmit(e) {
     }
 }
 
+// Toggle Secretary/Admin Arrears Adjustment Panel (Accordion Expand/Collapse)
+function toggleArrearsAdjustmentPanel() {
+    const secPanel = document.getElementById('secretaryArrearsPanel');
+    const toggleIcon = document.getElementById('adjToggleIcon');
+    if (!secPanel) return;
+
+    if (secPanel.style.display === 'none' || !secPanel.style.display) {
+        secPanel.style.display = 'block';
+        if (toggleIcon) toggleIcon.className = 'fa-solid fa-chevron-up';
+    } else {
+        secPanel.style.display = 'none';
+        if (toggleIcon) toggleIcon.className = 'fa-solid fa-chevron-down';
+    }
+}
+
 // Open Member Details (Hides monthly calendar grid as requested)
 function openMemberDetails(memberId) {
     const member = state.members.find(m => m.id === memberId);
@@ -1735,17 +1750,22 @@ function openMemberDetails(memberId) {
         if (presPanel) presPanel.style.display = 'none';
     }
 
-    // Only Secretary and Admin can see and apply arrears adjustments (increase/decrease)
+    // Only Secretary and Admin can see the toggle button for arrears adjustments
     const secPanel = document.getElementById('secretaryArrearsPanel');
+    const toggleBtn = document.getElementById('toggleArrearsPanelBtn');
+    const toggleIcon = document.getElementById('adjToggleIcon');
+
+    // Collapsed by default when modal opens
+    if (secPanel) secPanel.style.display = 'none';
+    if (toggleIcon) toggleIcon.className = 'fa-solid fa-chevron-down';
+
     if ((role === 'admin' || role === 'secretary') && member.member_type !== 'Free') {
-        if (secPanel) {
-            secPanel.style.display = 'block';
-            document.getElementById('adjMemberId').value = memberId;
-            document.getElementById('adjAmount').value = '';
-            document.getElementById('adjReason').value = '';
-        }
+        if (toggleBtn) toggleBtn.style.display = 'flex';
+        document.getElementById('adjMemberId').value = memberId;
+        document.getElementById('adjAmount').value = '';
+        document.getElementById('adjReason').value = '';
     } else {
-        if (secPanel) secPanel.style.display = 'none';
+        if (toggleBtn) toggleBtn.style.display = 'none';
     }
 
     // Render dynamic action buttons in details modal
