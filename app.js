@@ -3830,7 +3830,271 @@ ${htmlContent}
 }
 
 // ==========================================
+// Print Individual Member Statement / Yearly Report (A4 Layout)
 // ==========================================
+function generateYearlyPrintReport(targetMemberId) {
+    const memberId = targetMemberId || state.activeMemberId;
+    const member = state.members.find(m => m.id === memberId);
+    
+    if (!member) {
+        alert("কোনো সদস্য নির্বাচন করা হয়নি!");
+        return;
+    }
+
+    const mosqueName = state.settings.mosque_name || state.settings.mosqueName || DEFAULT_SETTINGS.mosque_name || 'মসজিদের নাম';
+    const mosqueAddress = state.settings.mosque_address || state.settings.address || DEFAULT_SETTINGS.mosque_address || '';
+    const logoSrc = state.settings.logo_base64 || state.settings.logoData || '';
+    const printDate = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    const totalDue = calculateMemberTotalDue(member.id);
+    const advanceBal = parseFloat(member.advance_balance || 0);
+    const openingArrears = parseFloat(member.opening_arrears || 0);
+
+    // Get all transactions for this member
+    const memberTxList = state.transactions
+        .filter(t => t.member_id === member.id && t.transaction_type === 'INCOME')
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    let totalPaidAllTime = memberTxList.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+
+    // Build Month-by-Month Subscription Payment Table
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const joinParts = (member.join_date || '2025-01-01').split('-');
+    const joinYear = parseInt(joinParts[0]) || 2025;
+    const joinMonth = parseInt(joinParts[1]) || 1;
+
+    let monthGridRowsHtml = '';
+    for (let y = joinYear; y <= currentYear; y++) {
+        let yearTotalExpected = 0;
+        let yearTotalPaid = 0;
+        let cellsHtml = '';
+
+        for (let m = 1; m <= 12; m++) {
+            const isBeforeJoin = (y === joinYear && m < joinMonth);
+            const isFutureMonth = (y > currentYear) || (y === currentYear && m > currentMonth);
+            
+            if (isBeforeJoin) {
+                cellsHtml += `<td style="text-align:center; color:#999; background:#f5f5f5; font-size:10px;">—</td>`;
+                continue;
+            }
+
+            const fee = parseFloat(member.monthly_fee || 0);
+            const sub = state.subscriptions.find(s => s.member_id === member.id && s.year === y && s.month === m);
+            const paid = sub ? parseFloat(sub.amount_paid || 0) : 0;
+            const due = fee - paid;
+
+            if (!isFutureMonth) {
+                yearTotalExpected += fee;
+                yearTotalPaid += paid;
+            }
+
+            let cellBg = '#ffffff';
+            let cellText = '৳ ০';
+            let statusStyle = 'color:#b71c1c; font-weight:bold;';
+
+            if (isFutureMonth) {
+                if (paid > 0) {
+                    cellBg = '#e8f5e9';
+                    cellText = `৳ ${englishToBanglaNum(paid.toFixed(0))}`;
+                    statusStyle = 'color:#2e7d32; font-weight:bold;';
+                } else {
+                    cellBg = '#fafafa';
+                    cellText = '—';
+                    statusStyle = 'color:#999;';
+                }
+            } else if (member.member_type === 'Free') {
+                cellBg = '#e8f5e9';
+                cellText = 'মওকুফ';
+                statusStyle = 'color:#2e7d32; font-weight:bold;';
+            } else if (paid >= fee) {
+                cellBg = '#e8f5e9';
+                cellText = `৳ ${englishToBanglaNum(paid.toFixed(0))}`;
+                statusStyle = 'color:#2e7d32; font-weight:bold;';
+            } else if (paid > 0) {
+                cellBg = '#fffde7';
+                cellText = `৳ ${englishToBanglaNum(paid.toFixed(0))}`;
+                statusStyle = 'color:#f57f17; font-weight:bold;';
+            } else {
+                cellBg = '#ffebee';
+                cellText = 'অনাদায়ী';
+                statusStyle = 'color:#c62828; font-weight:bold; font-size:10px;';
+            }
+
+            cellsHtml += `<td style="text-align:center; background:${cellBg}; ${statusStyle} font-size:11px; padding:6px 2px;">${cellText}</td>`;
+        }
+
+        const yearNetDue = Math.max(0, yearTotalExpected - yearTotalPaid);
+
+        monthGridRowsHtml += `<tr>
+            <td style="text-align:center; font-weight:bold; background:#f0f4f0; font-size:11px;">${englishToBanglaNum(y.toString())} খ্রি:</td>
+            ${cellsHtml}
+            <td style="text-align:right; font-weight:bold; color:#1b5e20; background:#f1f8f1; font-size:11px;">৳ ${englishToBanglaNum(yearTotalPaid.toFixed(0))}</td>
+            <td style="text-align:right; font-weight:bold; color:${yearNetDue > 0 ? '#b71c1c' : '#2e7d32'}; background:${yearNetDue > 0 ? '#fff5f5' : '#f1f8f1'}; font-size:11px;">${yearNetDue > 0 ? '৳ ' + englishToBanglaNum(yearNetDue.toFixed(0)) : 'পরিশোধিত'}</td>
+        </tr>`;
+    }
+
+    // Build Transaction History Rows
+    let txRowsHtml = '';
+    if (memberTxList.length === 0) {
+        txRowsHtml = `<tr><td colspan="6" style="text-align:center; padding:15px; color:#777;">এখনো কোনো নগদ/ব্যাংক রশিদের চাঁদা পরিশোধ এন্ট্রি পাওয়া যায়নি।</td></tr>`;
+    } else {
+        memberTxList.forEach((tx, idx) => {
+            const dateBN = formatDateBN(tx.date);
+            const receiptBN = tx.receipt_no ? englishToBanglaNum(tx.receipt_no) : '—';
+            const modeBN = (tx.payment_mode === 'BANK' || tx.payment_method === 'BANK') ? 'ব্যাংক' : 'নগদ';
+            const amtBN = englishToBanglaNum(parseFloat(tx.amount || 0).toFixed(2));
+            txRowsHtml += `<tr>
+                <td style="text-align:center;">${englishToBanglaNum((idx + 1).toString())}</td>
+                <td style="text-align:center;">${dateBN}</td>
+                <td style="text-align:center; font-weight:bold; color:#1565c0;">${receiptBN}</td>
+                <td style="text-align:left;">${tx.description || 'মাসিক চাঁদা পরিশোধ'}</td>
+                <td style="text-align:center;">${modeBN}</td>
+                <td style="text-align:right; font-weight:bold; color:#2e7d32;">৳ ${amtBN}</td>
+            </tr>`;
+        });
+    }
+
+    const printWindow = window.open('', '_blank', 'width=920,height=750');
+    if (!printWindow) {
+        alert("পপ-আপ ব্লক করা আছে। অনুগ্রহ করে ব্রাউজারে পপ-আপ অনুমতি দিন।");
+        return;
+    }
+
+    const memberRoleLabel = member.committee_role || (member.member_type === 'Poor' ? 'দরিদ্র সদস্য' : member.member_type === 'Free' ? 'ফ্রি সদস্য (মওকুফ)' : 'সাধারণ সদস্য');
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<title>${mosqueName} — ${member.name}-এর বাৎসরিক বিবরণী</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Hind Siliguri', Arial, sans-serif; font-size: 11px; color: #000; background: #fff; padding: 10mm; }
+  @page { size: A4 portrait; margin: 10mm; }
+  
+  .header-container { display: flex; align-items: center; position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 12px; min-height: 75px; }
+  .logo-container { position: absolute; left: 0; top: 0; width: 68px; height: 68px; border-radius: 50%; background: #ffffff; border: 1.5px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px; }
+  .logo-container img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+  .title-block { text-align: center; flex: 1; }
+  .title-block h1 { font-size: 18px; font-weight: 800; margin-bottom: 2px; }
+  .title-block p { font-size: 11px; color: #333; margin-bottom: 2px; }
+  .title-block h2 { font-size: 14px; font-weight: 700; display: inline-block; border-bottom: 1px solid #333; padding-bottom: 2px; margin-top: 4px; }
+  .print-date { position: absolute; right: 0; top: 0; font-size: 10px; color: #555; text-align: right; }
+
+  .member-card { background: #f8faf8; border: 1px solid #c8e6c9; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; }
+  .member-card div { margin-bottom: 3px; }
+  .member-card strong { color: #1b5e20; }
+
+  .summary-boxes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .sbox { border-radius: 6px; padding: 8px; text-align: center; border: 1px solid #ccc; }
+  .sbox.due { background: #ffebee; border-color: #ef5350; }
+  .sbox.adv { background: #e8f5e9; border-color: #66bb6a; }
+  .sbox.paid { background: #e3f2fd; border-color: #42a5f5; }
+  .sbox .lbl { font-size: 10px; color: #555; margin-bottom: 2px; }
+  .sbox .val { font-size: 14px; font-weight: 800; }
+
+  .section-title { font-size: 12px; font-weight: 700; color: #2e7d32; margin-bottom: 6px; border-left: 4px solid #2e7d32; padding-left: 6px; }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 10px; }
+  th, td { border: 1px solid #444; padding: 5px 4px; vertical-align: middle; }
+  th { background: #f0f4f0; font-weight: 700; text-align: center; }
+
+  .sigs { display: flex; justify-content: space-between; margin-top: 35px; }
+  .sig { text-align: center; width: 150px; border-top: 1px solid #000; padding-top: 5px; font-size: 11px; font-weight: 700; }
+
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+
+<div class="header-container">
+  ${logoSrc ? `<div class="logo-container"><img src="${logoSrc}" alt="Logo"></div>` : ''}
+  <div class="title-block">
+    <h1>${mosqueName}</h1>
+    <p>${mosqueAddress}</p>
+    <h2>সদস্যের ব্যক্তিগত চাঁদা আদায় ও বাৎসরিক বিবরণী</h2>
+  </div>
+  <div class="print-date">প্রিন্ট তারিখ:<br>${printDate}</div>
+</div>
+
+<div class="member-card">
+  <div><strong>সদস্যের নাম:</strong> ${member.name}</div>
+  <div><strong>সদস্য নং:</strong> ${englishToBanglaNum(member.member_no || member.id)}</div>
+  <div><strong>মোবাইল নম্বর:</strong> ${englishToBanglaNum(member.phone || '—')}</div>
+  <div><strong>পদবী / সদস্যের ধরণ:</strong> ${memberRoleLabel}</div>
+  <div><strong>ঠিকানা:</strong> ${member.address || '—'}</div>
+  <div><strong>মাসিক চাঁদার হার:</strong> ৳ ${englishToBanglaNum(parseFloat(member.monthly_fee || 0).toFixed(2))}</div>
+  <div><strong>যোগদানের তারিখ:</strong> ${formatDateBN(member.join_date || '2025-01-01')}</div>
+  <div><strong>বিগত বছরের বকেয়া:</strong> ৳ ${englishToBanglaNum(openingArrears.toFixed(2))}</div>
+</div>
+
+<div class="summary-boxes">
+  <div class="sbox due">
+    <div class="lbl">বর্তমান মোট বকেয়া</div>
+    <div class="val" style="color: #b71c1c;">৳ ${englishToBanglaNum(totalDue.toFixed(2))}</div>
+  </div>
+  <div class="sbox adv">
+    <div class="lbl">অগ্রিম জমা ব্যালেন্স</div>
+    <div class="val" style="color: #1b5e20;">৳ ${englishToBanglaNum(advanceBal.toFixed(2))}</div>
+  </div>
+  <div class="sbox paid">
+    <div class="lbl">সর্বমোট পরিশোধিত চাঁদা</div>
+    <div class="val" style="color: #0d47a1;">৳ ${englishToBanglaNum(totalPaidAllTime.toFixed(2))}</div>
+  </div>
+</div>
+
+<div class="section-title">📅 মাসভিত্তিক চাঁদা পরিশোধ স্ট্যাটাস</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 10%;">বছর</th>
+      <th>জানু</th><th>ফেব্রু</th><th>মার্চ</th><th>এপ্রিল</th><th>মে</th><th>জুন</th>
+      <th>জুলাই</th><th>আগস্ট</th><th>সেপ্টে</th><th>অক্টো</th><th>নভে</th><th>ডিসে</th>
+      <th style="width: 11%;">আদায়</th>
+      <th style="width: 11%;">বকেয়া</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${monthGridRowsHtml}
+  </tbody>
+</table>
+
+<div class="section-title">🧾 রশিদের মাধ্যমে পরিশোধিত চাঁদার তারিখভিত্তিক ইতিহাস</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 6%;">ক্রমিক</th>
+      <th style="width: 14%;">তারিখ</th>
+      <th style="width: 16%;">রশিদ নং</th>
+      <th style="width: 36%; text-align: left;">বিবরণ</th>
+      <th style="width: 12%;">মাধ্যম</th>
+      <th style="width: 16%; text-align: right;">পরিমাণ (৳)</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${txRowsHtml}
+  </tbody>
+</table>
+
+<div class="sigs">
+  <div class="sig">সদস্যের স্বাক্ষর</div>
+  <div class="sig">কোষাধ্যক্ষের স্বাক্ষর</div>
+  <div class="sig">সভাপতি / সাধারণ সম্পাদক</div>
+</div>
+
+</body>
+</html>`);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+        printWindow.print();
+    }, 900);
+}
+
 // 1. Print General Member Directory & Register (A4 Layout)
 // Column Layout: সদস্য নং | নাম | পদবী | মোবাইল | স্বাক্ষর | মন্তব্য
 // ==========================================
