@@ -222,6 +222,7 @@ function formatCurrency(amount) {
 
 // Format Date Helper
 function formatDate(dateStr) {
+    if (!dateStr) return '';
     const parts = dateStr.split('-');
     if (parts.length !== 3) return dateStr;
     const year = parts[0];
@@ -229,6 +230,8 @@ function formatDate(dateStr) {
     const day = parseInt(parts[2]);
     return `${englishToBanglaNum(day.toString())} ${BANGLA_MONTHS[month]}, ${englishToBanglaNum(year)}`;
 }
+
+const formatDateBN = formatDate;
 
 // Format short date e.g. "১২/০৬" for table
 function formatShortDateBN(dateStr) {
@@ -3833,138 +3836,132 @@ ${htmlContent}
 // Print Individual Member Statement / Yearly Report (A4 Layout)
 // ==========================================
 function generateYearlyPrintReport(targetMemberId) {
-    const memberId = targetMemberId || state.activeMemberId;
-    const member = state.members.find(m => m.id === memberId);
-    
-    if (!member) {
-        alert("কোনো সদস্য নির্বাচন করা হয়নি!");
-        return;
-    }
+    try {
+        const memberId = targetMemberId || state.activeMemberId;
+        const member = (state.members || []).find(m => m.id === memberId);
+        
+        if (!member) {
+            alert("কোনো সদস্য নির্বাচন করা হয়নি!");
+            return;
+        }
 
-    const mosqueName = state.settings.mosque_name || state.settings.mosqueName || DEFAULT_SETTINGS.mosque_name || 'মসজিদের নাম';
-    const mosqueAddress = state.settings.mosque_address || state.settings.address || DEFAULT_SETTINGS.mosque_address || '';
-    const logoSrc = state.settings.logo_base64 || state.settings.logoData || '';
-    const printDate = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
+        const mosqueName = state.settings.mosque_name || state.settings.mosqueName || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_name : 'মসজিদের নাম');
+        const mosqueAddress = state.settings.mosque_address || state.settings.address || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_address : '');
+        const logoSrc = state.settings.logo_base64 || state.settings.logoData || '';
+        const printDate = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
 
-    const totalDue = calculateMemberTotalDue(member.id);
-    const advanceBal = parseFloat(member.advance_balance || 0);
-    const openingArrears = parseFloat(member.opening_arrears || 0);
+        const totalDue = calculateMemberTotalDue(member.id);
+        const advanceBal = parseFloat(member.advance_balance || 0);
+        const openingArrears = parseFloat(member.opening_arrears || 0);
 
-    // Get all transactions for this member
-    const memberTxList = state.transactions
-        .filter(t => t.member_id === member.id && t.transaction_type === 'INCOME')
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
+        // Get all transactions for this member
+        const memberTxList = (state.transactions || [])
+            .filter(t => t.member_id === member.id && t.transaction_type === 'INCOME')
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    let totalPaidAllTime = memberTxList.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+        let totalPaidAllTime = memberTxList.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
 
-    // Build Month-by-Month Subscription Payment Table
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-    const joinParts = (member.join_date || '2025-01-01').split('-');
-    const joinYear = parseInt(joinParts[0]) || 2025;
-    const joinMonth = parseInt(joinParts[1]) || 1;
+        // Build Month-by-Month Subscription Payment Table
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+        const joinParts = (member.join_date || '2025-01-01').split('-');
+        const joinYear = parseInt(joinParts[0]) || 2025;
+        const joinMonth = parseInt(joinParts[1]) || 1;
 
-    let monthGridRowsHtml = '';
-    for (let y = joinYear; y <= currentYear; y++) {
-        let yearTotalExpected = 0;
-        let yearTotalPaid = 0;
-        let cellsHtml = '';
+        let monthGridRowsHtml = '';
+        for (let y = joinYear; y <= currentYear; y++) {
+            let yearTotalExpected = 0;
+            let yearTotalPaid = 0;
+            let cellsHtml = '';
 
-        for (let m = 1; m <= 12; m++) {
-            const isBeforeJoin = (y === joinYear && m < joinMonth);
-            const isFutureMonth = (y > currentYear) || (y === currentYear && m > currentMonth);
-            
-            if (isBeforeJoin) {
-                cellsHtml += `<td style="text-align:center; color:#999; background:#f5f5f5; font-size:10px;">—</td>`;
-                continue;
-            }
+            for (let m = 1; m <= 12; m++) {
+                const isBeforeJoin = (y === joinYear && m < joinMonth);
+                const isFutureMonth = (y > currentYear) || (y === currentYear && m > currentMonth);
+                
+                if (isBeforeJoin) {
+                    cellsHtml += `<td style="text-align:center; color:#999; background:#f5f5f5; font-size:10px;">—</td>`;
+                    continue;
+                }
 
-            const fee = parseFloat(member.monthly_fee || 0);
-            const sub = state.subscriptions.find(s => s.member_id === member.id && s.year === y && s.month === m);
-            const paid = sub ? parseFloat(sub.amount_paid || 0) : 0;
-            const due = fee - paid;
+                const fee = parseFloat(member.monthly_fee || 0);
+                const sub = (state.subscriptions || []).find(s => s.member_id === member.id && s.year === y && s.month === m);
+                const paid = sub ? parseFloat(sub.amount_paid || 0) : 0;
 
-            if (!isFutureMonth) {
-                yearTotalExpected += fee;
-                yearTotalPaid += paid;
-            }
+                if (!isFutureMonth) {
+                    yearTotalExpected += fee;
+                    yearTotalPaid += paid;
+                }
 
-            let cellBg = '#ffffff';
-            let cellText = '৳ ০';
-            let statusStyle = 'color:#b71c1c; font-weight:bold;';
+                let cellBg = '#ffffff';
+                let cellText = '৳ ০';
+                let statusStyle = 'color:#b71c1c; font-weight:bold;';
 
-            if (isFutureMonth) {
-                if (paid > 0) {
+                if (isFutureMonth) {
+                    if (paid > 0) {
+                        cellBg = '#e8f5e9';
+                        cellText = `৳ ${englishToBanglaNum(paid.toFixed(0))}`;
+                        statusStyle = 'color:#2e7d32; font-weight:bold;';
+                    } else {
+                        cellBg = '#fafafa';
+                        cellText = '—';
+                        statusStyle = 'color:#999;';
+                    }
+                } else if (member.member_type === 'Free') {
+                    cellBg = '#e8f5e9';
+                    cellText = 'মওকুফ';
+                    statusStyle = 'color:#2e7d32; font-weight:bold;';
+                } else if (paid >= fee) {
                     cellBg = '#e8f5e9';
                     cellText = `৳ ${englishToBanglaNum(paid.toFixed(0))}`;
                     statusStyle = 'color:#2e7d32; font-weight:bold;';
+                } else if (paid > 0) {
+                    cellBg = '#fffde7';
+                    cellText = `৳ ${englishToBanglaNum(paid.toFixed(0))}`;
+                    statusStyle = 'color:#f57f17; font-weight:bold;';
                 } else {
-                    cellBg = '#fafafa';
-                    cellText = '—';
-                    statusStyle = 'color:#999;';
+                    cellBg = '#ffebee';
+                    cellText = 'অনাদায়ী';
+                    statusStyle = 'color:#c62828; font-weight:bold; font-size:10px;';
                 }
-            } else if (member.member_type === 'Free') {
-                cellBg = '#e8f5e9';
-                cellText = 'মওকুফ';
-                statusStyle = 'color:#2e7d32; font-weight:bold;';
-            } else if (paid >= fee) {
-                cellBg = '#e8f5e9';
-                cellText = `৳ ${englishToBanglaNum(paid.toFixed(0))}`;
-                statusStyle = 'color:#2e7d32; font-weight:bold;';
-            } else if (paid > 0) {
-                cellBg = '#fffde7';
-                cellText = `৳ ${englishToBanglaNum(paid.toFixed(0))}`;
-                statusStyle = 'color:#f57f17; font-weight:bold;';
-            } else {
-                cellBg = '#ffebee';
-                cellText = 'অনাদায়ী';
-                statusStyle = 'color:#c62828; font-weight:bold; font-size:10px;';
+
+                cellsHtml += `<td style="text-align:center; background:${cellBg}; ${statusStyle} font-size:11px; padding:6px 2px;">${cellText}</td>`;
             }
 
-            cellsHtml += `<td style="text-align:center; background:${cellBg}; ${statusStyle} font-size:11px; padding:6px 2px;">${cellText}</td>`;
+            const yearNetDue = Math.max(0, yearTotalExpected - yearTotalPaid);
+
+            monthGridRowsHtml += `<tr>
+                <td style="text-align:center; font-weight:bold; background:#f0f4f0; font-size:11px;">${englishToBanglaNum(y.toString())} খ্রি:</td>
+                ${cellsHtml}
+                <td style="text-align:right; font-weight:bold; color:#1b5e20; background:#f1f8f1; font-size:11px;">৳ ${englishToBanglaNum(yearTotalPaid.toFixed(0))}</td>
+                <td style="text-align:right; font-weight:bold; color:${yearNetDue > 0 ? '#b71c1c' : '#2e7d32'}; background:${yearNetDue > 0 ? '#fff5f5' : '#f1f8f1'}; font-size:11px;">${yearNetDue > 0 ? '৳ ' + englishToBanglaNum(yearNetDue.toFixed(0)) : 'পরিশোধিত'}</td>
+            </tr>`;
         }
 
-        const yearNetDue = Math.max(0, yearTotalExpected - yearTotalPaid);
+        // Build Transaction History Rows
+        let txRowsHtml = '';
+        if (memberTxList.length === 0) {
+            txRowsHtml = `<tr><td colspan="6" style="text-align:center; padding:15px; color:#777;">এখনো কোনো নগদ/ব্যাংক রশিদের চাঁদা পরিশোধ এন্ট্রি পাওয়া যায়নি।</td></tr>`;
+        } else {
+            memberTxList.forEach((tx, idx) => {
+                const dateBN = formatDate(tx.date);
+                const receiptBN = tx.receipt_no ? englishToBanglaNum(tx.receipt_no) : '—';
+                const modeBN = (tx.payment_mode === 'BANK' || tx.payment_method === 'BANK') ? 'ব্যাংক' : 'নগদ';
+                const amtBN = englishToBanglaNum(parseFloat(tx.amount || 0).toFixed(2));
+                txRowsHtml += `<tr>
+                    <td style="text-align:center;">${englishToBanglaNum((idx + 1).toString())}</td>
+                    <td style="text-align:center;">${dateBN}</td>
+                    <td style="text-align:center; font-weight:bold; color:#1565c0;">${receiptBN}</td>
+                    <td style="text-align:left;">${tx.description || 'মাসিক চাঁদা পরিশোধ'}</td>
+                    <td style="text-align:center;">${modeBN}</td>
+                    <td style="text-align:right; font-weight:bold; color:#2e7d32;">৳ ${amtBN}</td>
+                </tr>`;
+            });
+        }
 
-        monthGridRowsHtml += `<tr>
-            <td style="text-align:center; font-weight:bold; background:#f0f4f0; font-size:11px;">${englishToBanglaNum(y.toString())} খ্রি:</td>
-            ${cellsHtml}
-            <td style="text-align:right; font-weight:bold; color:#1b5e20; background:#f1f8f1; font-size:11px;">৳ ${englishToBanglaNum(yearTotalPaid.toFixed(0))}</td>
-            <td style="text-align:right; font-weight:bold; color:${yearNetDue > 0 ? '#b71c1c' : '#2e7d32'}; background:${yearNetDue > 0 ? '#fff5f5' : '#f1f8f1'}; font-size:11px;">${yearNetDue > 0 ? '৳ ' + englishToBanglaNum(yearNetDue.toFixed(0)) : 'পরিশোধিত'}</td>
-        </tr>`;
-    }
+        const memberRoleLabel = member.committee_role || (member.member_type === 'Poor' ? 'দরিদ্র সদস্য' : member.member_type === 'Free' ? 'ফ্রি সদস্য (মওকুফ)' : 'সাধারণ সদস্য');
 
-    // Build Transaction History Rows
-    let txRowsHtml = '';
-    if (memberTxList.length === 0) {
-        txRowsHtml = `<tr><td colspan="6" style="text-align:center; padding:15px; color:#777;">এখনো কোনো নগদ/ব্যাংক রশিদের চাঁদা পরিশোধ এন্ট্রি পাওয়া যায়নি।</td></tr>`;
-    } else {
-        memberTxList.forEach((tx, idx) => {
-            const dateBN = formatDateBN(tx.date);
-            const receiptBN = tx.receipt_no ? englishToBanglaNum(tx.receipt_no) : '—';
-            const modeBN = (tx.payment_mode === 'BANK' || tx.payment_method === 'BANK') ? 'ব্যাংক' : 'নগদ';
-            const amtBN = englishToBanglaNum(parseFloat(tx.amount || 0).toFixed(2));
-            txRowsHtml += `<tr>
-                <td style="text-align:center;">${englishToBanglaNum((idx + 1).toString())}</td>
-                <td style="text-align:center;">${dateBN}</td>
-                <td style="text-align:center; font-weight:bold; color:#1565c0;">${receiptBN}</td>
-                <td style="text-align:left;">${tx.description || 'মাসিক চাঁদা পরিশোধ'}</td>
-                <td style="text-align:center;">${modeBN}</td>
-                <td style="text-align:right; font-weight:bold; color:#2e7d32;">৳ ${amtBN}</td>
-            </tr>`;
-        });
-    }
-
-    const printWindow = window.open('', '_blank', 'width=920,height=750');
-    if (!printWindow) {
-        alert("পপ-আপ ব্লক করা আছে। অনুগ্রহ করে ব্রাউজারে পপ-আপ অনুমতি দিন।");
-        return;
-    }
-
-    const memberRoleLabel = member.committee_role || (member.member_type === 'Poor' ? 'দরিদ্র সদস্য' : member.member_type === 'Free' ? 'ফ্রি সদস্য (মওকুফ)' : 'সাধারণ সদস্য');
-
-    printWindow.document.write(`<!DOCTYPE html>
+        const htmlContent = `<!DOCTYPE html>
 <html lang="bn">
 <head>
 <meta charset="UTF-8">
@@ -4027,7 +4024,7 @@ function generateYearlyPrintReport(targetMemberId) {
   <div><strong>পদবী / সদস্যের ধরণ:</strong> ${memberRoleLabel}</div>
   <div><strong>ঠিকানা:</strong> ${member.address || '—'}</div>
   <div><strong>মাসিক চাঁদার হার:</strong> ৳ ${englishToBanglaNum(parseFloat(member.monthly_fee || 0).toFixed(2))}</div>
-  <div><strong>যোগদানের তারিখ:</strong> ${formatDateBN(member.join_date || '2025-01-01')}</div>
+  <div><strong>যোগদানের তারিখ:</strong> ${formatDate(member.join_date || '2025-01-01')}</div>
   <div><strong>বিগত বছরের বকেয়া:</strong> ৳ ${englishToBanglaNum(openingArrears.toFixed(2))}</div>
 </div>
 
@@ -4086,13 +4083,25 @@ function generateYearlyPrintReport(targetMemberId) {
 </div>
 
 </body>
-</html>`);
+</html>`;
 
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-        printWindow.print();
-    }, 900);
+        const printWindow = window.open('', '_blank', 'width=920,height=750');
+        if (!printWindow) {
+            alert("পপ-আপ ব্লক করা আছে। অনুগ্রহ করে ব্রাউজারে পপ-আপ অনুমতি দিন।");
+            return;
+        }
+
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+        }, 800);
+
+    } catch (err) {
+        console.error("Error in generateYearlyPrintReport: ", err);
+        alert("বাৎসরিক বিবরণী তৈরি করার সময় ত্রুটি হয়েছে: " + err.message);
+    }
 }
 
 // 1. Print General Member Directory & Register (A4 Layout)
