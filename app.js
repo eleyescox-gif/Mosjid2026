@@ -2320,6 +2320,83 @@ function loadReports() {
     }
 }
 
+// Universal Professional Pad Header Generator for All Reports
+function getPadHeaderHTML(reportTitle, periodLabel = '', refSuffix = '', customDate = '') {
+
+    const mosqueName = state.settings.mosque_name || state.settings.mosqueName || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_name : 'পূর্ব মোহাজের পাড়া জামে মসজিদ');
+    let rawAddress = state.settings.mosque_address || state.settings.address || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_address : 'বরইতলী, চকরিয়া, কক্সবাজার।');
+    
+    let estYear = state.settings.established_year || state.settings.est_year || '';
+    let memoPrefix = state.settings.memo_prefix || 'পুমোপাজাম/২০২৬/';
+    const logoSrc = state.settings.logo_base64 || state.settings.logoData || '';
+    
+    let formattedAddress = rawAddress;
+    if (rawAddress.includes('স্থাপিত:')) {
+        const parts = rawAddress.split('|');
+        if (parts.length > 0 && !estYear) {
+            estYear = parts[0].replace('স্থাপিত:', '').trim();
+        }
+        if (parts.length > 1) {
+            formattedAddress = parts.slice(1).join('|').replace('ঠিকানা:', '').trim();
+        }
+    }
+    if (!estYear) estYear = '১৯৯৬ খ্রি.';
+
+    const printDate = customDate || new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
+    const fullRefNo = refSuffix ? (refSuffix.startsWith('সূত্র:') ? refSuffix : `সূত্র: ${memoPrefix}${refSuffix}`) : `সূত্র: ${memoPrefix}নথী-${englishToBanglaNum(new Date().getFullYear().toString())}`;
+
+    return `
+    <div class="official-pad-header">
+        <div class="pad-top-row">
+            <div class="pad-logo-wrapper">
+                ${logoSrc ? `<img src="${logoSrc}" alt="Logo">` : `<div class="pad-logo-fallback"><i class="fa-solid fa-mosque"></i></div>`}
+            </div>
+            <div class="pad-title-wrapper">
+                <h1 class="pad-institution-name">${mosqueName}</h1>
+                <div class="pad-subtitle-info">
+                    ${estYear ? `<span><strong>স্থাপিত:</strong> ${estYear}</span>` : ''}
+                    ${estYear && formattedAddress ? `<span class="pad-dot-sep">|</span>` : ''}
+                    ${formattedAddress ? `<span><strong>ঠিকানা:</strong> ${formattedAddress}</span>` : ''}
+                </div>
+            </div>
+        </div>
+        <div class="pad-subbar-row">
+            <div class="pad-memo-ref">${fullRefNo}</div>
+            <div class="pad-publish-date"><strong>প্রকাশ তারিখ:</strong> ${printDate}</div>
+        </div>
+        <div class="pad-divider-line"></div>
+        ${reportTitle ? `
+        <div class="pad-report-title-wrapper">
+            <h2 class="pad-report-main-title">${reportTitle}</h2>
+            ${periodLabel ? `<div class="pad-report-period">${periodLabel}</div>` : ''}
+        </div>` : ''}
+    </div>
+    `;
+}
+
+function getPadCSS() {
+    return `
+    .official-pad-header { width: 100%; margin-bottom: 12px; font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', Arial, sans-serif; }
+    .pad-top-row { display: flex; align-items: center; justify-content: center; position: relative; padding-bottom: 6px; min-height: 75px; }
+    .pad-logo-wrapper { position: absolute; left: 0; top: 0; width: 72px; height: 72px; border-radius: 50%; background: #ffffff; border: 1.5px solid #0f5132; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px; }
+    .pad-logo-wrapper img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+    .pad-logo-fallback { font-size: 32px; color: #0f5132; }
+    .pad-title-wrapper { text-align: center; flex: 1; padding: 0 75px; }
+    .pad-institution-name { font-size: 23px; font-weight: 800; color: #000; margin-bottom: 3px; letter-spacing: 0.3px; line-height: 1.25; }
+    .pad-subtitle-info { font-size: 12px; color: #333; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+    .pad-dot-sep { color: #0f5132; font-weight: 800; }
+    .pad-subbar-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #111; margin-top: 6px; padding: 2px 2px; font-weight: 600; }
+    .pad-memo-ref { text-align: left; }
+    .pad-publish-date { text-align: right; }
+    .pad-divider-line { border-bottom: 3px double #000; margin-top: 4px; margin-bottom: 12px; }
+    .pad-report-title-wrapper { text-align: center; margin-bottom: 15px; }
+    .pad-report-main-title { display: inline-block; font-size: 16px; font-weight: 800; color: #000; background: #f4faf6; border: 1.5px solid #0f5132; padding: 3px 20px; border-radius: 20px; letter-spacing: 0.3px; }
+    .pad-report-period { font-size: 13px; font-weight: 700; color: #111; margin-top: 4px; }
+    `;
+}
+
+    
+
 function generateAdvancedPrintReport() {
     const { startDate, endDate, periodLabel } = getReportDateRange();
 
@@ -2407,81 +2484,7 @@ function generateAdvancedPrintReport() {
     }
     if (!maxRows) tRows = '<tr><td colspan="9" style="text-align:center;padding:20px;color:#888;">এই সময়কালে কোনো আর্থিক লেনদেন সম্পন্ন হয়নি।</td></tr>';
 
-// Universal Professional Pad Header Generator for All Reports
-function getPadHeaderHTML(reportTitle, periodLabel = '', refSuffix = '', customDate = '') {
-    const mosqueName = state.settings.mosque_name || state.settings.mosqueName || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_name : 'পূর্ব মোহাজের পাড়া জামে মসজিদ');
-    let rawAddress = state.settings.mosque_address || state.settings.address || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_address : 'বরইতলী, চকরিয়া, কক্সবাজার।');
-    
-    let estYear = state.settings.established_year || state.settings.est_year || '';
-    let memoPrefix = state.settings.memo_prefix || 'পুমোপাজাম/২০২৬/';
-    const logoSrc = state.settings.logo_base64 || state.settings.logoData || '';
-    
-    let formattedAddress = rawAddress;
-    if (rawAddress.includes('স্থাপিত:')) {
-        const parts = rawAddress.split('|');
-        if (parts.length > 0 && !estYear) {
-            estYear = parts[0].replace('স্থাপিত:', '').trim();
-        }
-        if (parts.length > 1) {
-            formattedAddress = parts.slice(1).join('|').replace('ঠিকানা:', '').trim();
-        }
-    }
-    if (!estYear) estYear = '১৯৯৬ খ্রি.';
-
-    const printDate = customDate || new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
-    const fullRefNo = refSuffix ? (refSuffix.startsWith('সূত্র:') ? refSuffix : `সূত্র: ${memoPrefix}${refSuffix}`) : `সূত্র: ${memoPrefix}নথী-${englishToBanglaNum(new Date().getFullYear().toString())}`;
-
-    return `
-    <div class="official-pad-header">
-        <div class="pad-top-row">
-            <div class="pad-logo-wrapper">
-                ${logoSrc ? `<img src="${logoSrc}" alt="Logo">` : `<div class="pad-logo-fallback"><i class="fa-solid fa-mosque"></i></div>`}
-            </div>
-            <div class="pad-title-wrapper">
-                <h1 class="pad-institution-name">${mosqueName}</h1>
-                <div class="pad-subtitle-info">
-                    ${estYear ? `<span><strong>স্থাপিত:</strong> ${estYear}</span>` : ''}
-                    ${estYear && formattedAddress ? `<span class="pad-dot-sep">|</span>` : ''}
-                    ${formattedAddress ? `<span><strong>ঠিকানা:</strong> ${formattedAddress}</span>` : ''}
-                </div>
-            </div>
-        </div>
-        <div class="pad-subbar-row">
-            <div class="pad-memo-ref">${fullRefNo}</div>
-            <div class="pad-publish-date"><strong>প্রকাশ তারিখ:</strong> ${printDate}</div>
-        </div>
-        <div class="pad-divider-line"></div>
-        ${reportTitle ? `
-        <div class="pad-report-title-wrapper">
-            <h2 class="pad-report-main-title">${reportTitle}</h2>
-            ${periodLabel ? `<div class="pad-report-period">${periodLabel}</div>` : ''}
-        </div>` : ''}
-    </div>
-    `;
-}
-
-function getPadCSS() {
-    return `
-    .official-pad-header { width: 100%; margin-bottom: 12px; font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', Arial, sans-serif; }
-    .pad-top-row { display: flex; align-items: center; justify-content: center; position: relative; padding-bottom: 6px; min-height: 75px; }
-    .pad-logo-wrapper { position: absolute; left: 0; top: 0; width: 72px; height: 72px; border-radius: 50%; background: #ffffff; border: 1.5px solid #0f5132; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px; }
-    .pad-logo-wrapper img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
-    .pad-logo-fallback { font-size: 32px; color: #0f5132; }
-    .pad-title-wrapper { text-align: center; flex: 1; padding: 0 75px; }
-    .pad-institution-name { font-size: 23px; font-weight: 800; color: #000; margin-bottom: 3px; letter-spacing: 0.3px; line-height: 1.25; }
-    .pad-subtitle-info { font-size: 12px; color: #333; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
-    .pad-dot-sep { color: #0f5132; font-weight: 800; }
-    .pad-subbar-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #111; margin-top: 6px; padding: 2px 2px; font-weight: 600; }
-    .pad-memo-ref { text-align: left; }
-    .pad-publish-date { text-align: right; }
-    .pad-divider-line { border-bottom: 3px double #000; margin-top: 4px; margin-bottom: 12px; }
-    .pad-report-title-wrapper { text-align: center; margin-bottom: 15px; }
-    .pad-report-main-title { display: inline-block; font-size: 16px; font-weight: 800; color: #000; background: #f4faf6; border: 1.5px solid #0f5132; padding: 3px 20px; border-radius: 20px; letter-spacing: 0.3px; }
-    .pad-report-period { font-size: 13px; font-weight: 700; color: #111; margin-top: 4px; }
-    `;
-}
-
-    const mosqueN = state.settings.mosque_name || state.settings.mosqueName || DEFAULT_SETTINGS.mosque_name || 'মসজিদের নাম';
+const mosqueN = state.settings.mosque_name || state.settings.mosqueName || DEFAULT_SETTINGS.mosque_name || 'মসজিদের নাম';
 
     const pw = window.open('', '_blank', 'width=960,height=720');
     if (!pw) { alert('পপ-আপ ব্লক হয়েছে। অনুগ্রহ করে ব্রাউজারে পপ-আপ অনুমতি দিন।'); return; }
