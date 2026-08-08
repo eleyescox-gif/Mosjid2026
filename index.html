@@ -9,9 +9,13 @@
     <link rel="icon" type="image/svg+xml" href="icon.svg">
     <link rel="apple-touch-icon" href="icon.png">
     <meta name="theme-color" content="#2e7d32">
+    <!-- Google Fonts for Crisp Bengali Numerals & Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- FontAwesome for Premium Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=2026.08.05.10">
+    <link rel="stylesheet" href="style.css?v=2026.08.08.1">
     <!-- SheetJS for Excel Import -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -410,7 +414,40 @@
                 </div>
             </section>
 
-            <!-- ================== 5. PROFILE / SETTINGS VIEW ================== -->
+            <!-- ================== 5. COMMITTEE & SARDAR VIEW ================== -->
+            <section id="committee-view" class="app-view">
+                <div class="view-header" style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h2 style="font-size: 17px; font-weight: 800; color: var(--primary-dark); font-family: 'Hind Siliguri', 'Noto Sans Bengali', sans-serif;">পরিচালনা কমিটি ও সমাজ সর্দারবৃন্দ</h2>
+                        <p style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">মসজিদের পরিচালনা কমিটি ও এলাকার সমাজ অভিভাবকবৃন্দ</p>
+                    </div>
+                    <div id="committeeAdminAddBtnContainer" style="display: none;">
+                        <button class="btn btn-primary" onclick="switchView('profile'); setTimeout(scrollToCommitteeAdmin, 200);" style="font-size: 11px; padding: 6px 12px; height: 34px; border-radius: 8px; font-weight: 700;">
+                            <i class="fa-solid fa-user-plus"></i> তথ্য আপডেট
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter/Tab bar for Committee & Sardar -->
+                <div style="display: flex; gap: 6px; margin-bottom: 14px; background: #e8f5e9; padding: 4px; border-radius: 10px; border: 1px solid #c8e6c9;">
+                    <button id="commTabAll" onclick="filterCommitteeCategory('all')" class="comm-tab-btn active" style="flex: 1; padding: 8px 2px; font-size: 11px; font-weight: 700; border: none; border-radius: 8px; background: var(--primary-color); color: white; cursor: pointer; transition: all 0.2s;">
+                        <i class="fa-solid fa-users"></i> সকল সদস্য
+                    </button>
+                    <button id="commTabExecutive" onclick="filterCommitteeCategory('executive')" class="comm-tab-btn" style="flex: 1; padding: 8px 2px; font-size: 11px; font-weight: 700; border: none; border-radius: 8px; background: transparent; color: var(--text-main); cursor: pointer; transition: all 0.2s;">
+                        <i class="fa-solid fa-user-tie"></i> পরিচালনা কমিটি
+                    </button>
+                    <button id="commTabSardar" onclick="filterCommitteeCategory('sardar')" class="comm-tab-btn" style="flex: 1; padding: 8px 2px; font-size: 11px; font-weight: 700; border: none; border-radius: 8px; background: transparent; color: var(--text-main); cursor: pointer; transition: all 0.2s;">
+                        <i class="fa-solid fa-people-group"></i> সমাজ সর্দার
+                    </button>
+                </div>
+
+                <!-- Committee & Sardar Grid Cards Container -->
+                <div id="committeeViewGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 25px;">
+                    <!-- Dynamically rendered committee cards -->
+                </div>
+            </section>
+
+            <!-- ================== 6. PROFILE / SETTINGS VIEW ================== -->
             <section id="profile-view" class="app-view">
                 <div class="profile-header">
                     <div id="profileLogoContainer" class="profile-logo-style">
@@ -429,11 +466,21 @@
                     <form id="mosqueSettingsForm" onsubmit="handleSettingsSubmit(event)">
                         <div class="form-group">
                             <label for="setMosqueName">প্রতিষ্ঠানের নাম *</label>
-                            <input type="text" id="setMosqueName" class="form-control" required>
+                            <input type="text" id="setMosqueName" class="form-control" required placeholder="যেমন: পূর্ব মোহাজের পাড়া জামে মসজিদ">
+                        </div>
+                        <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="setEstYear">স্থাপিত সাল</label>
+                                <input type="text" id="setEstYear" class="form-control" placeholder="যেমন: ১৯৯৬ খ্রি.">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="setMemoPrefix">স্মারক/সূত্র নম্বর (প্রিফিক্স)</label>
+                                <input type="text" id="setMemoPrefix" class="form-control" placeholder="যেমন: পুমোপাজাম/২০২৬/">
+                            </div>
                         </div>
                         <div class="form-group">
-                            <label for="setMosqueAddress">ঠিকানা ও স্লোগান *</label>
-                            <input type="text" id="setMosqueAddress" class="form-control" required placeholder="যেমন: স্থাপিত: ১৯৯৫ খ্রি. | গ্রাম: মধ্যপাড়া">
+                            <label for="setMosqueAddress">ঠিকানা *</label>
+                            <input type="text" id="setMosqueAddress" class="form-control" required placeholder="যেমন: বরইতলী, চকরিয়া, কক্সবাজার।">
                         </div>
                         <div class="form-group">
                             <label for="setMosqueLogo">প্রতিষ্ঠানের লোগো (আপলোড)</label>
@@ -537,17 +584,26 @@
                         </div>
                         <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
                             <div class="form-group">
-                                <label style="font-size: 11px; font-weight: 600;">পদবী *</label>
-                                <input type="text" id="commDesignation" class="form-control" placeholder="যেমন: সভাপতি" required style="padding: 6px 10px; font-size: 12px;">
+                                <label style="font-size: 11px; font-weight: 600;">ক্যাটাগরি / বিভাগ *</label>
+                                <select id="commCategory" class="form-control" style="padding: 6px 10px; font-size: 12px;">
+                                    <option value="Executive">পরিচালনা কমিটি</option>
+                                    <option value="Sardar">সমাজ সর্দার</option>
+                                    <option value="Advisor">উপদেষ্টা মণ্ডলী</option>
+                                </select>
                             </div>
                             <div class="form-group">
-                                <label style="font-size: 11px; font-weight: 600;">মোবাইল নম্বর *</label>
-                                <input type="text" id="commPhone" class="form-control" placeholder="01711XXXXXX" required style="padding: 6px 10px; font-size: 12px;">
+                                <label style="font-size: 11px; font-weight: 600;">পদবী *</label>
+                                <input type="text" id="commDesignation" class="form-control" placeholder="যেমন: সভাপতি / সর্দার" required style="padding: 6px 10px; font-size: 12px;">
                             </div>
                         </div>
+                        <div class="form-group" style="margin-bottom: 10px;">
+                            <label style="font-size: 11px; font-weight: 600;">মোবাইল নম্বর *</label>
+                            <input type="text" id="commPhone" class="form-control" placeholder="01711XXXXXX" required style="padding: 6px 10px; font-size: 12px;">
+                        </div>
                         <div class="form-group" style="margin-bottom: 15px;">
-                            <label style="font-size: 11px; font-weight: 600;">সদস্যের ছবি (আপলোড)</label>
+                            <label style="font-size: 11px; font-weight: 600;">সদস্যের ছবি (আপলোড - সর্বোচ্চ ১০০KB)</label>
                             <input type="file" id="commPhoto" class="form-control" accept="image/*" style="padding: 4px; font-size: 11px;">
+                            <small style="font-size: 10px; color: var(--text-muted); display: block; margin-top: 2px;">PNG/JPG ফাইল (সর্বোচ্চ ১০০ কেবি)</small>
                             <div id="commPhotoPreview" style="display: none; margin-top: 8px;">
                                 <span style="font-size: 10px; color: var(--text-muted);">ছবি প্রিভিউ:</span>
                                 <img id="commPreviewImg" src="" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-color); display: block; margin-top: 4px;">
@@ -688,6 +744,10 @@
                 <div class="fab-btn">
                     <i class="fa-solid fa-plus"></i>
                 </div>
+            </div>
+            <div class="nav-item" onclick="switchView('committee')" id="nav-committee">
+                <i class="fa-solid fa-people-group"></i>
+                <span>কমিটি</span>
             </div>
             <div class="nav-item" onclick="switchView('reports')" id="nav-reports">
                 <i class="fa-solid fa-file-invoice-dollar"></i>
@@ -1191,7 +1251,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Main JavaScript App -->
-    <script src="app.js?v=2026.08.06.4"></script>
+    <script src="app.js?v=2026.08.08.1"></script>
     <script type="module" src="firebase-db.js?v=2"></script>
     <script>
         if ('serviceWorker' in navigator) {

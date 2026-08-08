@@ -31,7 +31,9 @@ const DEFAULT_USERS = {
 // Default App Institution Settings
 const DEFAULT_SETTINGS = {
     mosque_name: 'পূর্ব মোহাজের পাড়া জামে মসজিদ',
-    mosque_address: 'স্থাপিত: ১৯৯৬ | ঠিকানা: বরইতলী, চকরিয়া, কক্সবাজার।',
+    mosque_address: 'বরইতলী, চকরিয়া, কক্সবাজার।',
+    established_year: '১৯৯৬ খ্রি.',
+    memo_prefix: 'পুমোপাজাম/২০২৬/',
     logo_base64: '', // Base64 Data URL for logo
     bank_account_no: '',
     initial_bank_balance: 0,
@@ -174,8 +176,8 @@ document.addEventListener("DOMContentLoaded", () => {
         commPhotoInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
-                if (file.size > 204800) { // Limit to 200KB (200 * 1024)
-                    alert("ছবির সাইজ সর্বোচ্চ ২০০ কেবি (200 KB) হতে পারবে!");
+                if (file.size > 102400) { // Limit to 100KB (100 * 1024)
+                    alert("ছবির সাইজ সর্বোচ্চ ১০০ কেবি (100 KB) হতে পারবে!");
                     e.target.value = '';
                     document.getElementById('commPhotoPreview').style.display = 'none';
                     return;
@@ -672,12 +674,16 @@ function handleSettingsSubmit(e) {
 
     const newName = document.getElementById('setMosqueName').value.trim();
     const newAddress = document.getElementById('setMosqueAddress').value.trim();
+    const estYear = document.getElementById('setEstYear') ? document.getElementById('setEstYear').value.trim() : '';
+    const memoPrefix = document.getElementById('setMemoPrefix') ? document.getElementById('setMemoPrefix').value.trim() : '';
     const bankAccountNo = document.getElementById('setBankAccountNo').value.trim();
     const initialBank = parseFloat(document.getElementById('setInitialBankBalance').value) || 0;
     const initialCash = parseFloat(document.getElementById('setInitialCashBalance').value) || 0;
 
     state.settings.mosque_name = newName;
     state.settings.mosque_address = newAddress;
+    state.settings.established_year = estYear;
+    state.settings.memo_prefix = memoPrefix;
     state.settings.bank_account_no = bankAccountNo;
     state.settings.initial_bank_balance = initialBank;
     state.settings.initial_cash_balance = initialCash;
@@ -701,6 +707,12 @@ function handleSettingsSubmit(e) {
 function populateSettingsInputs() {
     document.getElementById('setMosqueName').value = state.settings.mosque_name || '';
     document.getElementById('setMosqueAddress').value = state.settings.mosque_address || '';
+    if (document.getElementById('setEstYear')) {
+        document.getElementById('setEstYear').value = state.settings.established_year || state.settings.est_year || '১৯৯৬ খ্রি.';
+    }
+    if (document.getElementById('setMemoPrefix')) {
+        document.getElementById('setMemoPrefix').value = state.settings.memo_prefix || 'পুমোপাজাম/২০২৬/';
+    }
     document.getElementById('setBankAccountNo').value = state.settings.bank_account_no || '';
     document.getElementById('setInitialBankBalance').value = state.settings.initial_bank_balance || 0;
     document.getElementById('setInitialCashBalance').value = state.settings.initial_cash_balance || 0;
@@ -1034,6 +1046,13 @@ function generateDemoData() {
     state.transactions = mockTransactions.sort((a,b) => new Date(b.date) - new Date(a.date));
     state.users = { ...DEFAULT_USERS };
     state.settings = { ...DEFAULT_SETTINGS };
+    state.committee = [
+        { id: 'comm-1', name: 'আলহাজ্ব মো: আব্দুর রহমান', designation: 'সভাপতি', category: 'Executive', phone: '01711122334', photo: '' },
+        { id: 'comm-2', name: 'হাজী মোঃ রফিকুল ইসলাম', designation: 'সাধারণ সম্পাদক', category: 'Executive', phone: '01722222222', photo: '' },
+        { id: 'comm-3', name: 'মো: জমির উদ্দিন', designation: 'ক্যাশিয়ার', category: 'Executive', phone: '01733333333', photo: '' },
+        { id: 'comm-4', name: 'হাজী জালাল আহমেদ', designation: 'সমাজ প্রধান/সর্দার', category: 'Sardar', phone: '01819876543', photo: '' },
+        { id: 'comm-5', name: 'আলহাজ্ব আমির হোসেন', designation: 'সমাজ সর্দার', category: 'Sardar', phone: '01912345678', photo: '' }
+    ];
     
     saveState();
 }
@@ -1197,6 +1216,8 @@ function switchView(viewId) {
         refreshAppUI();
     } else if (viewId === 'members') {
         renderMembersList();
+    } else if (viewId === 'committee') {
+        renderCommitteeView();
     } else if (viewId === 'reports') {
         loadReports();
     } else if (viewId === 'profile') {
@@ -1595,7 +1616,7 @@ function handleNewMemberSubmit(e) {
             return;
         }
 
-        const newId = 'member-' + (state.members.length + 1);
+        const newId = 'member-' + Date.now();
         const initialStatus = role === 'admin' ? 'Active' : 'Pending';
 
         const newMember = {
@@ -2386,30 +2407,93 @@ function generateAdvancedPrintReport() {
     }
     if (!maxRows) tRows = '<tr><td colspan="9" style="text-align:center;padding:20px;color:#888;">এই সময়কালে কোনো আর্থিক লেনদেন সম্পন্ন হয়নি।</td></tr>';
 
+// Universal Professional Pad Header Generator for All Reports
+function getPadHeaderHTML(reportTitle, periodLabel = '', refSuffix = '', customDate = '') {
+    const mosqueName = state.settings.mosque_name || state.settings.mosqueName || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_name : 'পূর্ব মোহাজের পাড়া জামে মসজিদ');
+    let rawAddress = state.settings.mosque_address || state.settings.address || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_address : 'বরইতলী, চকরিয়া, কক্সবাজার।');
+    
+    let estYear = state.settings.established_year || state.settings.est_year || '';
+    let memoPrefix = state.settings.memo_prefix || 'পুমোপাজাম/২০২৬/';
     const logoSrc = state.settings.logo_base64 || state.settings.logoData || '';
+    
+    let formattedAddress = rawAddress;
+    if (rawAddress.includes('স্থাপিত:')) {
+        const parts = rawAddress.split('|');
+        if (parts.length > 0 && !estYear) {
+            estYear = parts[0].replace('স্থাপিত:', '').trim();
+        }
+        if (parts.length > 1) {
+            formattedAddress = parts.slice(1).join('|').replace('ঠিকানা:', '').trim();
+        }
+    }
+    if (!estYear) estYear = '১৯৯৬ খ্রি.';
+
+    const printDate = customDate || new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
+    const fullRefNo = refSuffix ? (refSuffix.startsWith('সূত্র:') ? refSuffix : `সূত্র: ${memoPrefix}${refSuffix}`) : `সূত্র: ${memoPrefix}নথী-${englishToBanglaNum(new Date().getFullYear().toString())}`;
+
+    return `
+    <div class="official-pad-header">
+        <div class="pad-top-row">
+            <div class="pad-logo-wrapper">
+                ${logoSrc ? `<img src="${logoSrc}" alt="Logo">` : `<div class="pad-logo-fallback"><i class="fa-solid fa-mosque"></i></div>`}
+            </div>
+            <div class="pad-title-wrapper">
+                <h1 class="pad-institution-name">${mosqueName}</h1>
+                <div class="pad-subtitle-info">
+                    ${estYear ? `<span><strong>স্থাপিত:</strong> ${estYear}</span>` : ''}
+                    ${estYear && formattedAddress ? `<span class="pad-dot-sep">|</span>` : ''}
+                    ${formattedAddress ? `<span><strong>ঠিকানা:</strong> ${formattedAddress}</span>` : ''}
+                </div>
+            </div>
+        </div>
+        <div class="pad-subbar-row">
+            <div class="pad-memo-ref">${fullRefNo}</div>
+            <div class="pad-publish-date"><strong>প্রকাশ তারিখ:</strong> ${printDate}</div>
+        </div>
+        <div class="pad-divider-line"></div>
+        ${reportTitle ? `
+        <div class="pad-report-title-wrapper">
+            <h2 class="pad-report-main-title">${reportTitle}</h2>
+            ${periodLabel ? `<div class="pad-report-period">${periodLabel}</div>` : ''}
+        </div>` : ''}
+    </div>
+    `;
+}
+
+function getPadCSS() {
+    return `
+    .official-pad-header { width: 100%; margin-bottom: 12px; font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', Arial, sans-serif; }
+    .pad-top-row { display: flex; align-items: center; justify-content: center; position: relative; padding-bottom: 6px; min-height: 75px; }
+    .pad-logo-wrapper { position: absolute; left: 0; top: 0; width: 72px; height: 72px; border-radius: 50%; background: #ffffff; border: 1.5px solid #0f5132; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px; }
+    .pad-logo-wrapper img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+    .pad-logo-fallback { font-size: 32px; color: #0f5132; }
+    .pad-title-wrapper { text-align: center; flex: 1; padding: 0 75px; }
+    .pad-institution-name { font-size: 23px; font-weight: 800; color: #000; margin-bottom: 3px; letter-spacing: 0.3px; line-height: 1.25; }
+    .pad-subtitle-info { font-size: 12px; color: #333; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+    .pad-dot-sep { color: #0f5132; font-weight: 800; }
+    .pad-subbar-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #111; margin-top: 6px; padding: 2px 2px; font-weight: 600; }
+    .pad-memo-ref { text-align: left; }
+    .pad-publish-date { text-align: right; }
+    .pad-divider-line { border-bottom: 3px double #000; margin-top: 4px; margin-bottom: 12px; }
+    .pad-report-title-wrapper { text-align: center; margin-bottom: 15px; }
+    .pad-report-main-title { display: inline-block; font-size: 16px; font-weight: 800; color: #000; background: #f4faf6; border: 1.5px solid #0f5132; padding: 3px 20px; border-radius: 20px; letter-spacing: 0.3px; }
+    .pad-report-period { font-size: 13px; font-weight: 700; color: #111; margin-top: 4px; }
+    `;
+}
+
     const mosqueN = state.settings.mosque_name || state.settings.mosqueName || DEFAULT_SETTINGS.mosque_name || 'মসজিদের নাম';
-    const mosqueA = state.settings.mosque_address || state.settings.address || DEFAULT_SETTINGS.mosque_address || '';
-    const todayStr = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
 
     const pw = window.open('', '_blank', 'width=960,height=720');
     if (!pw) { alert('পপ-আপ ব্লক হয়েছে। অনুগ্রহ করে ব্রাউজারে পপ-আপ অনুমতি দিন।'); return; }
 
     pw.document.write(`<!DOCTYPE html><html lang="bn"><head><meta charset="UTF-8">
 <title>${mosqueN} - ${periodLabel}</title>
-<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Hind Siliguri',Arial,sans-serif;font-size:12px;color:#000;background:#fff;}
+body{font-family:'Hind Siliguri','Noto Sans Bengali','SolaimanLipi',Arial,sans-serif;font-size:12px;color:#000;background:#fff;}
 @page{size:A4;margin:12mm 12mm 15mm 12mm;}
-.ph{display:flex;align-items:center;position:relative;border-bottom:3px double #000;padding-bottom:10px;margin-bottom:14px;min-height:85px;}
-.logo-container{position:absolute;left:0;top:0;width:72px;height:72px;border-radius:50%;background:#ffffff;border:1.5px solid #ddd;box-shadow:0 2px 6px rgba(0,0,0,0.1);display:flex;align-items:center;justify-content:center;overflow:hidden;padding:3px;}
-.logo-container img{width:100%;height:100%;object-fit:contain;border-radius:50%;}
-.tb{text-align:center;flex:1;}
-.tb h1{font-size:18px;font-weight:800;margin-bottom:3px;}
-.tb p{font-size:11px;color:#444;margin-bottom:2px;}
-.tb h2{font-size:14px;font-weight:700;margin-top:5px;border-bottom:1px solid #555;display:inline-block;padding-bottom:2px;}
-.tb .per{font-size:13px;font-weight:700;margin-top:4px;}
-.pdate{position:absolute;right:0;top:0;font-size:10px;color:#555;text-align:right;}
+${getPadCSS()}
 .sstrip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
 .sb{border:1px solid #ccc;border-radius:6px;padding:8px 6px;text-align:center;}
 .sb .sl{font-size:10px;color:#666;margin-bottom:3px;}
@@ -2435,11 +2519,7 @@ tbody tr:nth-child(even){background:#f9f9f9;}
 .sig{text-align:center;width:150px;border-top:1px solid #000;padding-top:5px;font-size:11px;font-weight:700;}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
 </style></head><body>
-<div class="ph">
-${logoSrc ? `<div class="logo-container"><img src="${logoSrc}" alt="logo"></div>` : ''}
-<div class="tb"><h1>${mosqueN}</h1><p>${mosqueA}</p><h2>আয়-ব্যয় বিবরণী</h2><div class="per">${periodLabel}</div></div>
-<div class="pdate">প্রকাশ তারিখ:<br>${todayStr}</div>
-</div>
+${getPadHeaderHTML('আয়-ব্যয় বিবরণী', periodLabel, 'আয়-ব্যয়/' + englishToBanglaNum(startDate.substring(0,4)))}
 <div class="sstrip">
 <div class="sb inc"><div class="sl">মোট আয়</div><div class="sv">৳ ${englishToBanglaNum(totalInc.toFixed(2))}</div></div>
 <div class="sb exp"><div class="sl">মোট ব্যয়</div><div class="sv">৳ ${englishToBanglaNum(totalExp.toFixed(2))}</div></div>
@@ -2529,6 +2609,7 @@ function handleAddCommitteeSubmit(e) {
         const editId = document.getElementById('editCommId').value;
         const name = document.getElementById('commName').value.trim();
         const designation = document.getElementById('commDesignation').value.trim();
+        const category = document.getElementById('commCategory') ? document.getElementById('commCategory').value : 'Executive';
         const phone = document.getElementById('commPhone').value.trim();
 
         if (editId) {
@@ -2543,8 +2624,9 @@ function handleAddCommitteeSubmit(e) {
                 
                 commMember.name = name;
                 commMember.designation = designation;
+                commMember.category = category;
                 commMember.phone = phone;
-                commMember.photo = uploadedCommPhotoBase64;
+                if (uploadedCommPhotoBase64) commMember.photo = uploadedCommPhotoBase64;
                 
                 if (genMember) {
                     genMember.name = name;
@@ -2564,7 +2646,7 @@ function handleAddCommitteeSubmit(e) {
                     id: linkedMemberId,
                     name: name,
                     phone: phone,
-                    address: 'পরিচালনা কমিটি',
+                    address: category === 'Sardar' ? 'সমাজ সর্দার' : 'পরিচালনা কমিটি',
                     member_type: 'General',
                     monthly_fee: 150,
                     status: 'Active',
@@ -2598,18 +2680,20 @@ function handleAddCommitteeSubmit(e) {
                 id: Date.now().toString(),
                 name: name,
                 designation: designation,
+                category: category,
                 phone: phone,
                 photo: uploadedCommPhotoBase64,
                 member_id: linkedMemberId
             };
             state.committee.push(newCommMember);
-            alert("পরিচালনা কমিটির সদস্য সফলভাবে যোগ করা হয়েছে এবং সাধারণ সদস্য তালিকায় সিঙ্ক করা হয়েছে।");
+            alert("কমিটি/সর্দারের তথ্য সফলভাবে যোগ করা হয়েছে এবং সাধারণ সদস্য তালিকায় সিঙ্ক করা হয়েছে।");
         }
 
         saveState();
         cancelCommitteeEdit();
         renderAdminCommitteeEditor();
         renderCommitteeDashboard();
+        renderCommitteeView();
         refreshAppUI(); // Re-render general members list and statistics immediately!
     } catch (err) {
         console.error("Error adding committee member: ", err);
@@ -2625,6 +2709,9 @@ function editCommitteeMember(id) {
     document.getElementById('editCommId').value = m.id;
     document.getElementById('commName').value = m.name;
     document.getElementById('commDesignation').value = m.designation;
+    if (document.getElementById('commCategory')) {
+        document.getElementById('commCategory').value = m.category || 'Executive';
+    }
     document.getElementById('commPhone').value = m.phone;
 
     // Show preview of existing photo if any
@@ -2670,6 +2757,130 @@ function deleteCommitteeMember(id) {
     
     renderAdminCommitteeEditor();
     renderCommitteeDashboard();
+    renderCommitteeView();
+}
+
+// Filter & Render Public Committee View
+let currentCommFilter = 'all';
+
+function filterCommitteeCategory(cat) {
+    currentCommFilter = cat;
+    document.querySelectorAll('.comm-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+        btn.style.background = 'transparent';
+        btn.style.color = 'var(--text-main)';
+    });
+    const activeBtn = document.getElementById(`commTab${cat.charAt(0).toUpperCase() + cat.slice(1)}`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+        activeBtn.style.background = 'var(--primary-color)';
+        activeBtn.style.color = 'white';
+    }
+    renderCommitteeView();
+}
+
+function scrollToCommitteeAdmin() {
+    const adminSec = document.getElementById('adminCommitteeSection');
+    if (adminSec) {
+        adminSec.style.display = 'block';
+        adminSec.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+function renderCommitteeView() {
+    const grid = document.getElementById('committeeViewGrid');
+    const adminBtnContainer = document.getElementById('committeeAdminAddBtnContainer');
+    if (!grid) return;
+
+    if (state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'secretary')) {
+        if (adminBtnContainer) adminBtnContainer.style.display = 'block';
+    } else {
+        if (adminBtnContainer) adminBtnContainer.style.display = 'none';
+    }
+
+    grid.innerHTML = '';
+
+    if (!state.committee || state.committee.length === 0) {
+        grid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 30px 15px; background: white; border-radius: 14px; border: 1.5px dashed var(--border-color);">
+            <i class="fa-solid fa-users-slash" style="font-size: 32px; color: var(--text-muted); margin-bottom: 8px;"></i>
+            <p style="font-size: 13px; font-weight: 600;">পরিচালনা কমিটি ও সমাজ সর্দারদের কোনো তথ্য পাওয়া যায়নি।</p>
+            <p style="font-size: 11px; color: #888; margin-top: 4px;">এডমিন প্যানেল থেকে তথ্য সংযোজন করুন।</p>
+        </div>`;
+        return;
+    }
+
+    let list = [...state.committee];
+    if (currentCommFilter === 'executive') {
+        list = list.filter(m => !m.category || m.category === 'Executive');
+    } else if (currentCommFilter === 'sardar') {
+        list = list.filter(m => m.category === 'Sardar' || (m.designation && m.designation.includes('সর্দার')));
+    }
+
+    if (list.length === 0) {
+        grid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 25px 15px; background: white; border-radius: 14px; border: 1px dashed var(--border-color);">
+            <p style="font-size: 12px;">এই ক্যাটাগরিতে কোনো সদস্য পাওয়া যায়নি।</p>
+        </div>`;
+        return;
+    }
+
+    list.forEach(m => {
+        const card = document.createElement('div');
+        card.className = 'committee-member-card';
+        card.style.cssText = `
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 14px 10px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            transition: all 0.2s ease;
+        `;
+
+        const photoHTML = m.photo 
+            ? `<img src="${m.photo}" alt="${m.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`
+            : `<div style="font-size: 32px; color: var(--primary-color);"><i class="fa-solid fa-user-tie"></i></div>`;
+
+        const categoryTag = m.category === 'Sardar' || (m.designation && m.designation.includes('সর্দার'))
+            ? '<span style="font-size: 9px; background: #fff8e1; color: #b78103; border: 1px solid #ffe082; padding: 1px 6px; border-radius: 10px; margin-top: 2px; font-weight: 700;">সমাজ সর্দার</span>'
+            : '<span style="font-size: 9px; background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; padding: 1px 6px; border-radius: 10px; margin-top: 2px; font-weight: 700;">পরিচালনা কমিটি</span>';
+
+        card.innerHTML = `
+            <div style="width: 72px; height: 72px; border-radius: 50%; background: #ffffff; border: 2.5px solid var(--primary-color); padding: 3px; box-shadow: 0 3px 8px rgba(15,81,50,0.18); margin-bottom: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                ${photoHTML}
+            </div>
+
+            <div style="font-size: 13px; font-weight: 800; color: #111111; margin-bottom: 3px; line-height: 1.3;">
+                ${m.name}
+            </div>
+
+            <div style="font-size: 11px; font-weight: 700; color: var(--primary-color); margin-bottom: 2px;">
+                ${m.designation || 'কমিটি সদস্য'}
+            </div>
+
+            <div style="margin-bottom: 8px;">
+                ${categoryTag}
+            </div>
+
+            <div style="font-size: 11px; font-weight: 600; color: #444; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                <i class="fa-solid fa-phone" style="font-size: 10px; color: var(--secondary-color);"></i>
+                <span>${m.phone ? englishToBanglaNum(m.phone) : '—'}</span>
+            </div>
+
+            ${m.phone ? `
+            <a href="tel:${m.phone}" class="btn" style="width: 100%; height: 32px; font-size: 11px; padding: 0; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 8px; background: var(--primary-color); color: white; border: none; font-weight: 700; text-decoration: none; box-shadow: 0 2px 5px rgba(15,81,50,0.2);">
+                <i class="fa-solid fa-phone-volume"></i> কল করুন
+            </a>` : ''}
+        `;
+
+        grid.appendChild(card);
+    });
 }
 
 // Global slider interval variable
@@ -3696,19 +3907,11 @@ function generateAllMembersKhata() {
 
         const memberHtml = `
             <div class="khata-page">
-                <div class="khata-header" style="position: relative; margin-bottom: 20px;">
-                    ${logoSrc ? `<div style="position: absolute; left: 0; top: 0; width: 68px; height: 68px; border-radius: 50%; background: #ffffff; border: 1.5px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px;">
-                        <img src="${logoSrc}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;">
-                    </div>` : ''}
-                    <div class="khata-title" style="text-align: center;">
-                        <h2 style="font-size: 20px; margin: 0 0 4px 0; font-weight: bold; color: #000;">${mosqueName}</h2>
-                        <p style="font-size: 13px; margin: 0 0 4px 0; color: #333;">${mosqueAddress}</p>
-                        <h3 style="font-size: 16px; margin: 0 0 4px 0; font-weight: bold;">মাসিক চাঁদা আদায় বহি</h3>
-                        <p style="font-size: 13px; font-weight: bold; margin: 0;">বছর: ${englishToBanglaNum(selectedYear.toString())} খ্রি: (বর্তমান মাস পর্যন্ত হিসাব)</p>
-                    </div>
-                    <div style="position: absolute; right: 0; top: 0; font-weight: bold; font-size: 14px; border: 1px solid #000; padding: 4px 8px; border-radius: 4px;">
+                ${getPadHeaderHTML('মাসিক চাঁদা আদায় বহি (খাতা)', `বছর: ${englishToBanglaNum(selectedYear.toString())} খ্রি: (বর্তমান মাস পর্যন্ত)`, 'আদায়-খাতা/' + englishToBanglaNum(selectedYear.toString()))}
+                <div style="text-align: right; margin-top: -10px; margin-bottom: 10px;">
+                    <span style="font-weight: bold; font-size: 13px; border: 1.5px solid #0f5132; padding: 3px 10px; border-radius: 6px; background: #f4faf6;">
                         সদস্য নং: ${memberNum}
-                    </div>
+                    </span>
                 </div>
                 
                 <div class="khata-top-info" style="display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: bold; font-size: 14px; background: #fdfdfd; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
@@ -3763,16 +3966,17 @@ function generateAllMembersKhata() {
 <head>
     <meta charset="UTF-8">
     <title>আদায় খাতা - ${englishToBanglaNum(selectedYear.toString())} খ্রি:</title>
-    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Hind Siliguri', 'SolaimanLipi', Arial, sans-serif;
+            font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', Arial, sans-serif;
             font-size: 13px;
             color: #000;
             background: #fff;
         }
         @page { size: A4 portrait; margin: 15mm 15mm 20mm 15mm; }
+        ${getPadCSS()}
 
         .khata-page {
             width: 100%;
@@ -3986,10 +4190,10 @@ function generateYearlyPrintReport(targetMemberId) {
 <head>
 <meta charset="UTF-8">
 <title>${mosqueName} — ${member.name}-এর বাৎসরিক বিবরণী</title>
-<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Hind Siliguri', Arial, sans-serif; font-size: 11px; color: #000; background: #fff; padding: 10mm; }
+  body { font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', Arial, sans-serif; font-size: 11px; color: #000; background: #fff; padding: 10mm; }
   @page { size: A4 portrait; margin: 10mm; }
   
   .header-container { display: flex; align-items: center; position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 12px; min-height: 75px; }
@@ -4023,19 +4227,12 @@ function generateYearlyPrintReport(targetMemberId) {
   .sig { text-align: center; width: 150px; border-top: 1px solid #000; padding-top: 5px; font-size: 11px; font-weight: 700; }
 
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  ${getPadCSS()}
 </style>
 </head>
 <body>
 
-<div class="header-container">
-  ${logoSrc ? `<div class="logo-container"><img src="${logoSrc}" alt="Logo"></div>` : ''}
-  <div class="title-block">
-    <h1>${mosqueName}</h1>
-    <p>${mosqueAddress}</p>
-    <h2>সদস্যের ব্যক্তিগত চাঁদা আদায় ও বাৎসরিক বিবরণী</h2>
-  </div>
-  <div class="print-date">প্রিন্ট তারিখ:<br>${printDate}</div>
-</div>
+${getPadHeaderHTML(`${member.name}-এর বাৎসরিক ও ব্যক্তিগত বিবরণী`, `সদস্য নং: ${englishToBanglaNum(member.member_no || member.id)} | পদবী: ${memberRoleLabel}`, 'সদস্য/' + englishToBanglaNum(member.member_no || member.id), printDate)}
 
 <div class="member-card">
   <div><strong>সদস্যের নাম:</strong> ${member.name}</div>
@@ -4219,10 +4416,10 @@ function printAllMembersList() {
 <head>
 <meta charset="UTF-8">
 <title>${mosqueName} — সদস্য রেজিস্টার (${filterText})</title>
-<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Hind Siliguri', Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
+  body { font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
   @page { size: A4 portrait; margin: 15mm 15mm 20mm 15mm; }
   .header { display: flex; align-items: flex-start; justify-content: center; position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 14px; min-height: 75px; }
   .logo { position: absolute; left: 0; top: 0; width: 68px; height: 68px; object-fit: contain; }
@@ -4239,20 +4436,11 @@ function printAllMembersList() {
   .signatures { display: flex; justify-content: space-between; margin-top: 45px; }
   .sig-box { text-align: center; width: 160px; border-top: 1px solid #000; padding-top: 5px; font-size: 13px; font-weight: 700; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  ${getPadCSS()}
 </style>
 </head>
 <body>
-<div class="header">
-  ${logoSrc ? `<div style="position: absolute; left: 0; top: 0; width: 68px; height: 68px; border-radius: 50%; background: #ffffff; border: 1.5px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px;">
-    <img src="${logoSrc}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;">
-  </div>` : ''}
-  <div class="title-block">
-    <h2>${mosqueName}</h2>
-    <p>${mosqueAddress}</p>
-    <h3>সদস্য রেজিস্টার তালিকা (${filterText})</h3>
-  </div>
-  <div class="print-date">প্রিন্ট তারিখ:<br>${printDate}</div>
-</div>
+${getPadHeaderHTML('সদস্য রেজিস্টার তালিকা', `শ্রেণী/ফিল্টার: ${filterText}`, 'রেজিস্টার/' + englishToBanglaNum(new Date().getFullYear().toString()), printDate)}
 <table>
   <thead>
     <tr>
@@ -4359,10 +4547,10 @@ function printArrearsList() {
 <head>
 <meta charset="UTF-8">
 <title>${mosqueName} — বকেয়া সদস্য তালিকা</title>
-<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Hind Siliguri', Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
+  body { font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', Arial, sans-serif; font-size: 13px; color: #000; background: #fff; }
   @page { size: A4 portrait; margin: 15mm 15mm 20mm 15mm; }
   .header { display: flex; align-items: flex-start; justify-content: center; position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 14px; min-height: 75px; }
   .logo { position: absolute; left: 0; top: 0; width: 68px; height: 68px; object-fit: contain; }
@@ -4380,20 +4568,11 @@ function printArrearsList() {
   .signatures { display: flex; justify-content: space-between; margin-top: 45px; }
   .sig-box { text-align: center; width: 160px; border-top: 1px solid #000; padding-top: 5px; font-size: 13px; font-weight: 700; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  ${getPadCSS()}
 </style>
 </head>
 <body>
-<div class="header">
-  ${logoSrc ? `<div style="position: absolute; left: 0; top: 0; width: 68px; height: 68px; border-radius: 50%; background: #ffffff; border: 1.5px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 3px;">
-    <img src="${logoSrc}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;">
-  </div>` : ''}
-  <div class="title-block">
-    <h2>${mosqueName}</h2>
-    <p>${mosqueAddress}</p>
-    <h3>সদস্যদের বকেয়া চাঁদা পরিশোধের তালিকা</h3>
-  </div>
-  <div class="print-date">প্রিন্ট তারিখ:<br>${printDate}</div>
-</div>
+${getPadHeaderHTML('সদস্যদের বকেয়া চাঁদা পরিশোধের তালিকা', `মোট বকেয়া সদস্য সংখ্যা: ${englishToBanglaNum(arrearsMembers.length.toString())} জন`, 'বকেয়া-তালিকা/' + englishToBanglaNum(new Date().getFullYear().toString()), printDate)}
 <table>
   <thead>
     <tr>

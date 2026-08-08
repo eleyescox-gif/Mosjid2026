@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
     --primary-color: #0f5132;
@@ -40,12 +40,13 @@ html, body {
 }
 
 body {
-    font-family: 'Inter', 'Hind Siliguri', sans-serif;
+    font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', 'Inter', sans-serif;
     color: var(--text-main);
     line-height: 1.6;
     display: flex;
     justify-content: center;
     align-items: flex-start;
+    -webkit-font-smoothing: antialiased;
 }
 
 /* Mobile Container Viewport */
@@ -1311,7 +1312,7 @@ textarea.form-control {
         color: black !important;
         padding: 0 !important;
         margin: 0 !important;
-        font-family: 'Inter', 'Hind Siliguri', sans-serif !important;
+        font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', sans-serif !important;
     }
 
     /* Only show the targeted print area based on the active body class */
@@ -1396,7 +1397,7 @@ textarea.form-control {
         color: #000 !important;
         text-align: center;
         vertical-align: middle;
-        font-family: 'Inter', 'Hind Siliguri', sans-serif !important;
+        font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', sans-serif !important;
     }
 
     #printableKhataArea th {
