@@ -430,14 +430,11 @@
 
                 <!-- Filter/Tab bar for Committee & Sardar -->
                 <div style="display: flex; gap: 6px; margin-bottom: 14px; background: #e8f5e9; padding: 4px; border-radius: 10px; border: 1px solid #c8e6c9;">
-                    <button id="commTabAll" onclick="filterCommitteeCategory('all')" class="comm-tab-btn active" style="flex: 1; padding: 8px 2px; font-size: 11px; font-weight: 700; border: none; border-radius: 8px; background: var(--primary-color); color: white; cursor: pointer; transition: all 0.2s;">
-                        <i class="fa-solid fa-users"></i> সকল সদস্য
-                    </button>
-                    <button id="commTabExecutive" onclick="filterCommitteeCategory('executive')" class="comm-tab-btn" style="flex: 1; padding: 8px 2px; font-size: 11px; font-weight: 700; border: none; border-radius: 8px; background: transparent; color: var(--text-main); cursor: pointer; transition: all 0.2s;">
-                        <i class="fa-solid fa-user-tie"></i> পরিচালনা কমিটি
+                    <button id="commTabExecutive" onclick="filterCommitteeCategory('executive')" class="comm-tab-btn active" style="flex: 1; padding: 8px 2px; font-size: 11px; font-weight: 700; border: none; border-radius: 8px; background: var(--primary-color); color: white; cursor: pointer; transition: all 0.2s;">
+                        পরিচালনা কমিটি
                     </button>
                     <button id="commTabSardar" onclick="filterCommitteeCategory('sardar')" class="comm-tab-btn" style="flex: 1; padding: 8px 2px; font-size: 11px; font-weight: 700; border: none; border-radius: 8px; background: transparent; color: var(--text-main); cursor: pointer; transition: all 0.2s;">
-                        <i class="fa-solid fa-people-group"></i> সমাজ সর্দার
+                        সমাজ সর্দার
                     </button>
                 </div>
 
@@ -549,6 +546,49 @@
                         </select>
                         <button class="btn btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 42px;" onclick="generateAllMembersKhata()">
                             <i class="fa-solid fa-print"></i> আদায় খাতা জেনারেট করুন
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ADMIN ONLY: Individual Member Yearly Report Section -->
+                <div id="adminIndividualReportSection" class="chart-card" style="margin-bottom: 20px; display: none;">
+                    <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span><i class="fa-solid fa-user-pen" style="margin-right: 6px;"></i>সদস্য প্রতি বাৎসরিক বিবরণী প্রিন্ট</span>
+                        <i class="fa-solid fa-file-pdf" style="color: #dc3545;"></i>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">
+                            <i class="fa-solid fa-circle-info" style="color: var(--primary-color);"></i>
+                            নির্দিষ্ট সদস্য নির্বাচন করে তার ব্যক্তিগত বাৎসরিক লেনদেন বিবরণী (আদায় খাতা) A4 সাইজে প্রিন্ট করুন।
+                        </p>
+                        
+                        <label style="font-size: 12px; font-weight: 600; margin-bottom: 6px; display: block;">সদস্য নির্বাচন করুন</label>
+                        <div style="position: relative; margin-bottom: 12px;">
+                            <input type="text" id="adminMemberSearchInput" class="form-control" placeholder="🔍 সদস্যের নাম বা নম্বর লিখুন..." oninput="filterAdminMemberDropdown()" onfocus="document.getElementById('adminMemberDropdownList').style.display='block'" style="padding-right: 30px;">
+                            <div id="adminMemberDropdownList" style="display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 999; margin-top: 4px;">
+                            </div>
+                        </div>
+                        <div id="adminSelectedMemberInfo" style="display: none; background: linear-gradient(135deg, #e8f5e9, #c8e6c9); padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #a5d6a7;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong id="adminSelectedMemberName" style="font-size: 14px; color: #1b5e20;"></strong>
+                                    <div id="adminSelectedMemberMeta" style="font-size: 11px; color: #2e7d32; margin-top: 2px;"></div>
+                                </div>
+                                <button type="button" onclick="clearAdminMemberSelection()" style="background: none; border: none; color: #c62828; font-size: 16px; cursor: pointer; padding: 4px;" title="বাতিল করুন"><i class="fa-solid fa-circle-xmark"></i></button>
+                            </div>
+                        </div>
+                        <input type="hidden" id="adminSelectedMemberId" value="">
+
+                        <label style="font-size: 12px; font-weight: 600; margin-bottom: 6px; display: block;">বছর নির্বাচন করুন</label>
+                        <select id="adminIndividualYearSelect" class="form-control" style="margin-bottom: 14px;">
+                            <option value="2025">২০২৫</option>
+                            <option value="2026" selected>২০২৬</option>
+                            <option value="2027">২০২৭</option>
+                            <option value="2028">২০২৮</option>
+                        </select>
+
+                        <button class="btn btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%); border: none; font-weight: 700; font-size: 13px;" onclick="generateSingleMemberKhata()">
+                            <i class="fa-solid fa-file-pdf"></i> বাৎসরিক বিবরণী প্রিন্ট (A4)
                         </button>
                     </div>
                 </div>
@@ -730,7 +770,7 @@
 
         </main>
 
-        <!-- Bottom Navigation Bar -->
+        <!-- Bottom Navigation Bar (Simple & Modern) -->
         <nav class="bottom-nav">
             <div class="nav-item active" onclick="switchView('dashboard')" id="nav-dashboard">
                 <i class="fa-solid fa-house"></i>
@@ -944,6 +984,73 @@
             </button>
 
             <button class="btn btn-secondary" onclick="closeModal('member-details-modal')" style="margin-top: 10px;">বন্ধ করুন</button>
+        </div>
+    </div>
+
+    <!-- Modal 3: Member Statement Modal -->
+    <div id="member-statement-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)">
+        <div class="modal-content" style="max-height: 90%; max-width: 600px; overflow-y: auto;">
+            <div class="modal-header">
+                <h4 id="statementModalName">সদস্যের লেনদেন বিবরণী</h4>
+                <button class="icon-btn" onclick="closeModal('member-statement-modal')" style="background: none; color: var(--text-main);"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <!-- Member Summary Info -->
+            <div style="background-color: var(--bg-color); border-radius: 12px; padding: 15px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <p style="font-size: 14px; font-weight: bold; margin-bottom: 5px;" id="stmtMemberName">নাম</p>
+                        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 2px;" id="stmtMemberPhone"><i class="fa-solid fa-phone"></i> মোবাইল</p>
+                        <p style="font-size: 12px; margin-bottom: 0;" id="stmtMemberType"><span class="member-type-badge general">সাধারণ</span></p>
+                    </div>
+                    <div style="text-align: right;">
+                        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 2px;">বছর নির্বাচন করুন:</p>
+                        <select id="statementYearSelect" class="form-control" style="padding: 4px 8px; font-size: 13px; min-width: 100px;" onchange="renderStatementTable()">
+                            <option value="2025">২০২৫</option>
+                            <option value="2026" selected>২০২৬</option>
+                            <option value="2027">২০২৭</option>
+                            <option value="2028">২০২৮</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 15px;">
+                <div style="background: linear-gradient(135deg, #e8f5e9, #c8e6c9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #a5d6a7;">
+                    <div style="font-size: 11px; color: #2e7d32; font-weight: bold;">মোট পরিশোধ</div>
+                    <div id="stmtTotalPaid" style="font-size: 14px; font-weight: 800; color: #1b5e20; margin-top: 4px;">৳ ০</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #ffebee, #ffcdd2); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #ef9a9a;">
+                    <div style="font-size: 11px; color: #c62828; font-weight: bold;">মোট বকেয়া</div>
+                    <div id="stmtTotalDue" style="font-size: 14px; font-weight: 800; color: #b71c1c; margin-top: 4px;">৳ ০</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #e3f2fd, #bbdefb); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #90caf9;">
+                    <div style="font-size: 11px; color: #1565c0; font-weight: bold;">অগ্রিম জমা</div>
+                    <div id="stmtAdvanceBalance" style="font-size: 14px; font-weight: 800; color: #0d47a1; margin-top: 4px;">৳ ০</div>
+                </div>
+            </div>
+
+            <!-- Statement Table -->
+            <div class="table-responsive" style="overflow-x: auto; margin-bottom: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <table class="statement-table" style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
+                    <thead>
+                        <tr style="background-color: var(--primary-light); color: var(--primary-dark);">
+                            <th style="padding: 10px; border-bottom: 1px solid var(--border-color);">মাস</th>
+                            <th style="padding: 10px; border-bottom: 1px solid var(--border-color);">মাসিক চাঁদা</th>
+                            <th style="padding: 10px; border-bottom: 1px solid var(--border-color);">পরিশোধ</th>
+                            <th style="padding: 10px; border-bottom: 1px solid var(--border-color);">রশিদ নম্বর</th>
+                            <th style="padding: 10px; border-bottom: 1px solid var(--border-color);">আদায়কারী</th>
+                            <th style="padding: 10px; border-bottom: 1px solid var(--border-color);">চলতি বকেয়া</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statementTableBody">
+                        <!-- Content dynamically loaded -->
+                    </tbody>
+                </table>
+            </div>
+
+            <button class="btn btn-secondary" onclick="closeModal('member-statement-modal')" style="width: 100%;">বন্ধ করুন</button>
         </div>
     </div>
 
