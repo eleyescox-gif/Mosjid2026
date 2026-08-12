@@ -2560,11 +2560,11 @@ function getPadHeaderHTML(reportTitle, periodLabel = '', refSuffix = '', customD
                 </div>
             </div>
         </div>
+        <div class="pad-divider-line"></div>
         <div class="pad-subbar-row">
             <div class="pad-memo-ref">${fullRefNo}</div>
             <div class="pad-publish-date"><strong>প্রকাশ তারিখ:</strong> ${printDate}</div>
         </div>
-        <div class="pad-divider-line"></div>
         ${reportTitle ? `
         <div class="pad-report-title-wrapper">
             <h2 class="pad-report-main-title">${reportTitle}</h2>
@@ -2585,10 +2585,10 @@ function getPadCSS() {
     .pad-institution-name { font-size: 23px; font-weight: 800; color: #000; margin-bottom: 3px; letter-spacing: 0.3px; line-height: 1.25; }
     .pad-subtitle-info { font-size: 12px; color: #333; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
     .pad-dot-sep { color: #0f5132; font-weight: 800; }
-    .pad-subbar-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #111; margin-top: 6px; padding: 2px 2px; font-weight: 600; }
+    .pad-divider-line { border-bottom: 3px double #000; margin-top: 6px; margin-bottom: 6px; }
     .pad-memo-ref { text-align: left; }
     .pad-publish-date { text-align: right; }
-    .pad-divider-line { border-bottom: 3px double #000; margin-top: 4px; margin-bottom: 12px; }
+    .pad-subbar-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #111; margin-top: 4px; margin-bottom: 14px; padding: 0 2px; font-weight: 600; }
     .pad-report-title-wrapper { text-align: center; margin-bottom: 15px; }
     .pad-report-main-title { display: inline-block; font-size: 16px; font-weight: 800; color: #000; background: #f4faf6; border: 1.5px solid #0f5132; padding: 3px 20px; border-radius: 20px; letter-spacing: 0.3px; }
     .pad-report-period { font-size: 13px; font-weight: 700; color: #111; margin-top: 4px; }
@@ -4682,6 +4682,15 @@ function generateYearlyPrintReport(targetMemberId) {
         }
 
         const memberRoleLabel = member.committee_role || (member.member_type === 'Poor' ? 'দরিদ্র সদস্য' : member.member_type === 'Free' ? 'ফ্রি সদস্য (মওকুফ)' : 'সাধারণ সদস্য');
+        
+        const realIndex = (state.members || []).findIndex(m => m.id === member.id) + 1;
+        let cleanMemberNo = '';
+        if (member.member_no && !String(member.member_no).includes('bulk') && !String(member.member_no).includes('member-')) {
+            cleanMemberNo = String(member.member_no);
+        } else {
+            cleanMemberNo = String(realIndex > 0 ? realIndex : 1).padStart(2, '0');
+        }
+        const memberNumBN = englishToBanglaNum(cleanMemberNo);
 
         const htmlContent = `<!DOCTYPE html>
 <html lang="bn">
@@ -4730,11 +4739,11 @@ function generateYearlyPrintReport(targetMemberId) {
 </head>
 <body>
 
-${getPadHeaderHTML(`${member.name}-এর বাৎসরিক ও ব্যক্তিগত বিবরণী`, `সদস্য নং: ${englishToBanglaNum(member.member_no || member.id)} | পদবী: ${memberRoleLabel}`, 'সদস্য/' + englishToBanglaNum(member.member_no || member.id), printDate)}
+${getPadHeaderHTML(`${member.name}-এর বাৎসরিক ও ব্যক্তিগত বিবরণী`, `পদবী / ধরন: ${memberRoleLabel}`, 'সদস্য/' + memberNumBN, printDate)}
 
 <div class="member-card">
   <div><strong>সদস্যের নাম:</strong> ${member.name}</div>
-  <div><strong>সদস্য নং:</strong> ${englishToBanglaNum(member.member_no || member.id)}</div>
+  <div><strong>সদস্য নং:</strong> ${memberNumBN}</div>
   <div><strong>মোবাইল নম্বর:</strong> ${englishToBanglaNum(member.phone || '—')}</div>
   <div><strong>পদবী / সদস্যের ধরণ:</strong> ${memberRoleLabel}</div>
   <div><strong>ঠিকানা:</strong> ${member.address || '—'}</div>
