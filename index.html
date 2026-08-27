@@ -246,7 +246,7 @@
 
                     <div class="form-group">
                         <label for="txAmount">টাকার পরিমাণ (৳) *</label>
-                        <input type="number" id="txAmount" class="form-control" placeholder="যেমন: ৫০০" required min="1">
+                        <input type="number" id="txAmount" class="form-control" placeholder="যেমন: ৫০০.০০" required min="0.01" step="any">
                     </div>
 
                     <div class="form-group">
@@ -495,11 +495,11 @@
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label for="setInitialBankBalance">ব্যাংক ব্যালেন্স (৳) *</label>
-                                <input type="number" id="setInitialBankBalance" class="form-control" min="0" value="0" required>
+                                <input type="number" id="setInitialBankBalance" class="form-control" min="0" step="any" value="0" required>
                             </div>
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label for="setInitialCashBalance">হাতে নগদ অর্থ (৳) *</label>
-                                <input type="number" id="setInitialCashBalance" class="form-control" min="0" value="0" required>
+                                <input type="number" id="setInitialCashBalance" class="form-control" min="0" step="any" value="0" required>
                             </div>
                         </div>
                         <button type="submit" class="btn btn-primary" style="height: 38px;">
@@ -835,7 +835,7 @@
                 </div>
                 <div class="form-group" id="mCustomFeeGroup">
                     <label for="mCustomFee">চাঁদার পরিমাণ (৳) *</label>
-                    <input type="number" id="mCustomFee" class="form-control" value="150" min="0" required>
+                    <input type="number" id="mCustomFee" class="form-control" value="150" min="0" step="any" required>
                 </div>
 
                 <button type="submit" class="btn btn-primary" id="saveMemberBtn">সংরক্ষণ করুন</button>
@@ -895,7 +895,7 @@
                     <div class="form-row" style="grid-template-columns: 1fr;">
                         <div class="form-group">
                             <label for="epAmount">পরিশোধিত/অগ্রিম টাকা (৳) * <span style="font-size:10px;font-weight:normal;color:var(--text-muted);">(বকেয়ার বেশি দিলে তা অগ্রিম জমা হবে)</span></label>
-                            <input type="number" id="epAmount" class="form-control" placeholder="টাকা লিখুন" required min="1" oninput="calculateRealtimeNextDue()" onkeyup="calculateRealtimeNextDue()" onchange="calculateRealtimeNextDue()">
+                            <input type="number" id="epAmount" class="form-control" placeholder="টাকা লিখুন" required min="0.01" step="any" oninput="calculateRealtimeNextDue()" onkeyup="calculateRealtimeNextDue()" onchange="calculateRealtimeNextDue()">
                         </div>
                     </div>
                     
@@ -921,7 +921,7 @@
                     <div class="form-row" style="grid-template-columns: 1fr;">
                         <div class="form-group">
                             <label for="wpAmount">মওকুফের পরিমাণ (৳) *</label>
-                            <input type="number" id="wpAmount" class="form-control" placeholder="মওকুফের পরিমাণ লিখুন" required min="1">
+                            <input type="number" id="wpAmount" class="form-control" placeholder="মওকুফের পরিমাণ লিখুন" required min="0.01" step="any">
                         </div>
                     </div>
                     <div class="form-group" style="margin-bottom: 12px;">
@@ -960,7 +960,7 @@
                         </div>
                         <div class="form-group">
                             <label for="adjAmount">টাকার পরিমাণ (৳) *</label>
-                            <input type="number" id="adjAmount" class="form-control" placeholder="টাকা লিখুন" required min="1" style="font-size: 12px; padding: 8px;">
+                            <input type="number" id="adjAmount" class="form-control" placeholder="টাকা লিখুন" required min="0.01" step="any" style="font-size: 12px; padding: 8px;">
                         </div>
                     </div>
                     <div class="form-group" style="margin-bottom: 12px;">
