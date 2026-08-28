@@ -59,6 +59,44 @@ let state = {
 
 window.state = state;
 
+// Universal Transaction Deduplicator (Removes accidental double-postings)
+function deduplicateTransactions() {
+    if (!state.transactions || !Array.isArray(state.transactions)) return false;
+    
+    const seenReceipts = new Set();
+    const cleanTransactions = [];
+    let hasDuplicates = false;
+
+    state.transactions.forEach(tx => {
+        if (!tx) return;
+        const rNo = tx.receipt_no ? String(tx.receipt_no).trim() : '';
+        const memberId = tx.member_id || '';
+        const txDate = tx.date || '';
+        const amt = parseFloat(tx.amount || 0).toFixed(2);
+        
+        // If it's a member fee income with a valid receipt number
+        if (tx.transaction_type === 'INCOME' && rNo && rNo !== '—' && rNo.toUpperCase() !== 'ADVANCE') {
+            const key = 'M_' + memberId + '_R_' + rNo + '_D_' + txDate + '_A_' + amt;
+            if (!seenReceipts.has(key)) {
+                seenReceipts.add(key);
+                cleanTransactions.push(tx);
+            } else {
+                hasDuplicates = true;
+                console.warn('Auto-removing duplicate transaction entry:', tx);
+            }
+        } else {
+            cleanTransactions.push(tx);
+        }
+    });
+
+    if (hasDuplicates) {
+        state.transactions = cleanTransactions;
+        return true;
+    }
+    return false;
+}
+
+
 // Receive updated state from Firebase
 window.syncStateFromCloud = function(cloudState) {
     if (!cloudState) return;
@@ -86,6 +124,7 @@ window.syncStateFromCloud = function(cloudState) {
         return;
     }
     state.transactions = ensureArray(cloudState.transactions);
+    deduplicateTransactions();
     state.subscriptions = ensureArray(cloudState.subscriptions);
     state.committee = ensureArray(cloudState.committee);
     state.global_recycle_bin = recycleBin;
@@ -423,6 +462,9 @@ function loadState() {
 
     // Apply Settings (Name, Address, Logo) to UI
     applySettingsToUI();
+    
+    // Auto-clean any accidental double-posting
+    if (deduplicateTransactions()) { saveState(); }
     
     // Process any pending advance payments
     processAdvanceDeductions();
@@ -5184,8 +5226,14 @@ function exportMembersToExcel() {
 // Print Monthly Member-wise Receipt Collection Report & Summary (A4 Layout)
 // STRICT CASH-ACCOUNTING: Lists ONLY receipts physically collected/posted in THIS month
 // Previous/Future months' advances are NOT included in this month's cash receipts.
+
 // ==========================================
-function generateMonthlyMemberCollectionReport(customMonth, customYear) {
+// Print Monthly Member-wise Receipt Collection Report & Summary (A4 Layout)
+// PROFESSIONAL STRICT CASH ACCRUAL:
+// Source of truth is state.transactions (Every real receipt posted = 1 row)
+// No duplicate advance rows, no phantom receipts.
+// ==========================================
+function generateMonthlyMemberCollectionReport(customMonth, customYear, customMode) {
     try {
         const monthSelect = document.getElementById('reportMonth');
         const yearSelect = document.getElementById('reportYear');
@@ -5204,15 +5252,16 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
 
         const mosqueName = state.settings.mosque_name || state.settings.mosqueName || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_name : 'পূর্ব মোহাজের পাড়া জামে মসজিদ');
 
-        // 1. Collect ONLY transactions/receipts that were PHYSICALLY POSTED IN THIS SELECTED MONTH (date starts with monthPrefix)
-        const receiptMap = new Map();
+        // 1. Gather ONLY actual posted transactions in this selected month
+        const receiptList = [];
 
-        // Check transactions with date in this selected month
+        const seenReceiptKeys = new Set();
+
         (state.transactions || []).forEach(tx => {
             if (tx.transaction_type !== 'INCOME') return;
             const txDate = tx.date || '';
             
-            // STRICT FILTER: The transaction/receipt date MUST be strictly within this selected month!
+            // STRICT FILTER: Transaction date must strictly belong to this selected month!
             if (!txDate.startsWith(monthPrefix)) return;
 
             const isMemberFee = (tx.member_id && state.members.some(m => m.id === tx.member_id)) ||
@@ -5221,12 +5270,31 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
                                 tx.category === 'মাসিক চাঁদা' ||
                                 tx.is_member_fee;
 
+            const txMode = (tx.payment_mode === 'BANK' || tx.payment_method === 'BANK') ? 'BANK' : 'CASH';
+            if (customMode && customMode !== 'ALL' && customMode !== txMode) return;
+
             if (isMemberFee && parseFloat(tx.amount || 0) > 0) {
                 const member = (state.members || []).find(m => m.id === tx.member_id);
-                const rKey = (tx.receipt_no ? String(tx.receipt_no).trim() : '') || ('tx-' + tx.id);
                 
-                receiptMap.set(rKey, {
-                    receipt_no: tx.receipt_no ? String(tx.receipt_no).trim() : '—',
+                // Never include phantom/internal deduction markers as receipt number
+                let cleanReceiptNo = tx.receipt_no ? String(tx.receipt_no).trim() : '';
+                if (cleanReceiptNo.toUpperCase() === 'ADVANCE' || cleanReceiptNo === '—') {
+                    cleanReceiptNo = '';
+                }
+
+                // DEDUPLICATION: Prevent any duplicate entry from showing twice
+                const dedupeKey = cleanReceiptNo ? 
+                    ('M_' + (tx.member_id || '') + '_R_' + cleanReceiptNo + '_D_' + txDate + '_A_' + parseFloat(tx.amount || 0).toFixed(2)) : 
+                    ('TX_' + tx.id);
+
+                if (seenReceiptKeys.has(dedupeKey)) {
+                    return; // Skip duplicate!
+                }
+                seenReceiptKeys.add(dedupeKey);
+
+                receiptList.push({
+                    id: tx.id,
+                    receipt_no: cleanReceiptNo || '—',
                     member_id: tx.member_id || '',
                     member_name: member ? member.name : (tx.description ? tx.description.split('-')[0].trim() : 'সদস্য চাঁদা'),
                     phone: member ? (member.phone || '') : '',
@@ -5239,53 +5307,32 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
             }
         });
 
-        // Also check subscriptions ONLY if their last_payment_date is strictly in THIS selected month
-        (state.subscriptions || []).forEach(sub => {
-            const payDate = sub.last_payment_date || '';
-            if (payDate.startsWith(monthPrefix) && parseFloat(sub.amount_paid || 0) > 0) {
-                const member = (state.members || []).find(m => m.id === sub.member_id);
-                const rNo = sub.receipt_no ? String(sub.receipt_no).trim() : '';
-                const rKey = rNo || ('sub-' + sub.member_id + '-' + sub.year + '-' + sub.month);
-
-                if (!receiptMap.has(rKey) && (!rNo || ![...receiptMap.values()].some(v => v.receipt_no === rNo))) {
-                    let collector = sub.collector || '';
-                    if (!collector && sub.last_payment_date) {
-                        const matchingTx = (state.transactions || []).find(t => t.member_id === sub.member_id && t.date === sub.last_payment_date);
-                        if (matchingTx) collector = matchingTx.created_by || matchingTx.collected_by || '';
-                    }
-
-                    receiptMap.set(rKey, {
-                        receipt_no: rNo || '—',
-                        member_id: sub.member_id,
-                        member_name: member ? member.name : 'সদস্য',
-                        phone: member ? (member.phone || '') : '',
-                        amount: parseFloat(sub.amount_paid || 0),
-                        date: payDate,
-                        payment_mode: 'নগদ',
-                        description: member ? (member.name + ' - চাঁদা আদায় (রশিদ নং: ' + (rNo || '—') + ')') : 'মাসিক চাঁদা',
-                        collector: collector || 'কোষাধ্যক্ষ'
-                    });
-                }
-            }
-        });
-
-        const receiptList = Array.from(receiptMap.values());
-
         if (receiptList.length === 0) {
-            alert(monthName + ' ' + yearBN + ' খ্রি: মাসে চাঁদা আদায়ের কোনো নতুন রশিদ পোস্টিং এন্ট্রি পাওয়া যায়নি!');
+            alert(monthName + ' ' + yearBN + ' খ্রি: মাসে চাঁদা আদায়ের কোনো রশিদ পোস্টিং এন্ট্রি পাওয়া যায়নি!');
             return;
         }
 
-        // 2. Sort strictly by Receipt Number (numeric or alphabetical), fallback to Date
+        // 2. Sort: 1st Priority = Date (Ascending), 2nd Priority = Receipt Number (Numeric Ascending)
         receiptList.sort((a, b) => {
+            const dateA = new Date(a.date || '1970-01-01').getTime();
+            const dateB = new Date(b.date || '1970-01-01').getTime();
+            
+            // 1st Priority: Date
+            if (dateA !== dateB) {
+                return dateA - dateB;
+            }
+
+            // 2nd Priority: Receipt Number (numeric)
             const numA = parseInt(a.receipt_no);
             const numB = parseInt(b.receipt_no);
+            
             if (!isNaN(numA) && !isNaN(numB)) {
                 return numA - numB;
             }
             if (a.receipt_no !== '—' && b.receipt_no === '—') return -1;
             if (a.receipt_no === '—' && b.receipt_no !== '—') return 1;
-            return new Date(a.date) - new Date(b.date);
+            
+            return String(a.receipt_no || '').localeCompare(String(b.receipt_no || ''));
         });
 
         // 3. Calculate Aggregated Summaries
@@ -5451,4 +5498,75 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
         console.error("Error in generateMonthlyMemberCollectionReport: ", err);
         alert("রশিদ ভিত্তিক চাঁদা আদায় তালিকা তৈরি করার সময় একটি ত্রুটি হয়েছে:\n" + err.message);
     }
+}
+
+
+// ==========================================
+// Monthly Collection Filter Modal Handlers
+// ==========================================
+function openMonthlyCollectionFilterModal() {
+    const now = new Date();
+    const curMonth = document.getElementById('reportMonth') ? parseInt(document.getElementById('reportMonth').value) : (now.getMonth() + 1);
+    const curYear = document.getElementById('reportYear') ? parseInt(document.getElementById('reportYear').value) : now.getFullYear();
+
+    const mSelect = document.getElementById('filterReportMonth');
+    const ySelect = document.getElementById('filterReportYear');
+    const modeSelect = document.getElementById('filterReportMode');
+    
+    if (mSelect) mSelect.value = curMonth.toString();
+    if (ySelect) ySelect.value = curYear.toString();
+    if (modeSelect) modeSelect.value = 'ALL';
+
+    updateMonthlyFilterPreview();
+    openModal('monthly-collection-filter-modal');
+}
+
+function updateMonthlyFilterPreview() {
+    const m = parseInt(document.getElementById('filterReportMonth')?.value) || (new Date().getMonth() + 1);
+    const y = parseInt(document.getElementById('filterReportYear')?.value) || new Date().getFullYear();
+    const mode = document.getElementById('filterReportMode')?.value || 'ALL';
+    const monthPrefix = y + '-' + String(m).padStart(2, '0');
+
+    let count = 0;
+    let total = 0;
+
+    (state.transactions || []).forEach(tx => {
+        if (tx.transaction_type !== 'INCOME') return;
+        if (!tx.date || !tx.date.startsWith(monthPrefix)) return;
+
+        const isMemberFee = (tx.member_id && state.members.some(mem => mem.id === tx.member_id)) ||
+                            tx.category === 'Subscription' ||
+                            tx.category === 'সদস্য চাঁদা' ||
+                            tx.category === 'মাসিক চাঁদা' ||
+                            tx.is_member_fee;
+
+        if (isMemberFee && parseFloat(tx.amount || 0) > 0) {
+            const pm = (tx.payment_mode === 'BANK' || tx.payment_method === 'BANK') ? 'BANK' : 'CASH';
+            if (mode === 'ALL' || mode === pm) {
+                count++;
+                total += parseFloat(tx.amount || 0);
+            }
+        }
+    });
+
+    const previewEl = document.getElementById('monthlyFilterPreviewStats');
+    if (previewEl) {
+        if (count > 0) {
+            previewEl.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+                '<span style="color: #1565c0; font-weight: 700;"><i class="fa-solid fa-receipt"></i> প্রাপ্ত রশিদ: ' + englishToBanglaNum(count.toString()) + ' টি</span>' +
+                '<span style="color: #1b5e20; font-weight: 800; font-size: 14px;"><i class="fa-solid fa-money-bill-wave"></i> মোট আদায়: ৳ ' + englishToBanglaNum(total.toFixed(2)) + '</span>' +
+            '</div>';
+        } else {
+            previewEl.innerHTML = '<span style="color: #c62828;"><i class="fa-solid fa-circle-exclamation"></i> এই মাসে কোনো চাঁদা আদায়ের রশিদ পাওয়া যায়নি।</span>';
+        }
+    }
+}
+
+function submitMonthlyCollectionReportFromModal() {
+    const m = parseInt(document.getElementById('filterReportMonth')?.value) || (new Date().getMonth() + 1);
+    const y = parseInt(document.getElementById('filterReportYear')?.value) || new Date().getFullYear();
+    const mode = document.getElementById('filterReportMode')?.value || 'ALL';
+    
+    closeModal('monthly-collection-filter-modal');
+    generateMonthlyMemberCollectionReport(m, y, mode);
 }
