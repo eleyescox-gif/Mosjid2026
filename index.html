@@ -211,7 +211,10 @@
 
                 <div class="section-header">
                     <h3>সদস্য তালিকা</h3>
-                    <div style="display: flex; gap: 8px;">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" style="height: 36px; padding: 0 12px; font-size: 12px; width: auto; background-color: #e8f5e9; color: #1b5e20; border: 1.5px solid #a5d6a7; font-weight: 700;" onclick="generateMonthlyMemberCollectionReport()">
+                            <i class="fa-solid fa-file-invoice-dollar"></i> মাসিক আদায় তালিকা
+                        </button>
                         <button class="btn btn-secondary" style="height: 36px; padding: 0 12px; font-size: 12px; width: auto; background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;" onclick="printArrearsList()">
                             <i class="fa-solid fa-print"></i> বকেয়া তালিকা
                         </button>
@@ -409,7 +412,10 @@
                 <!-- Print Institution Statement Triggers -->
                 <div style="display: flex; gap: 10px; flex-direction: column;">
                     <button class="btn btn-primary" onclick="generateAdvancedPrintReport()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #062b19, #0b4528);">
-                        <i class="fa-solid fa-print"></i> <span id="printBtnLabel">বিবরণী প্রিন্ট (A4)</span>
+                        <i class="fa-solid fa-print"></i> <span id="printBtnLabel">আয়-ব্যয় বিবরণী প্রিন্ট (A4)</span>
+                    </button>
+                    <button class="btn btn-primary" onclick="generateMonthlyMemberCollectionReport()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #1565c0, #0d47a1); border: none; box-shadow: 0 4px 12px rgba(21, 101, 192, 0.25);">
+                        <i class="fa-solid fa-file-invoice-dollar"></i> <span>সদস্যভিত্তিক মাসিক চাঁদা আদায় তালিকা প্রিন্ট (A4)</span>
                     </button>
                 </div>
             </section>
@@ -544,9 +550,14 @@
                             <option value="2027">২০২৭</option>
                             <option value="2028">২০২৮</option>
                         </select>
-                        <button class="btn btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 42px;" onclick="generateAllMembersKhata()">
-                            <i class="fa-solid fa-print"></i> আদায় খাতা জেনারেট করুন
-                        </button>
+                        <div style="display: flex; gap: 8px; flex-direction: column;">
+                            <button class="btn btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 42px;" onclick="generateAllMembersKhata()">
+                                <i class="fa-solid fa-print"></i> সকল সদস্যের বাৎসরিক আদায় খাতা
+                            </button>
+                            <button class="btn btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 42px; background: #e8f5e9; color: #1b5e20; border: 1.5px solid #a5d6a7; font-weight: 700;" onclick="generateMonthlyMemberCollectionReport(null, document.getElementById('adayKhataYearSelect')?.value)">
+                                <i class="fa-solid fa-file-invoice-dollar"></i> সদস্যভিত্তিক মাসিক চাঁদা আদায় তালিকা প্রিন্ট
+                            </button>
+                        </div>
                     </div>
                 </div>
 
