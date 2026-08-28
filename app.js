@@ -5179,6 +5179,11 @@ function exportMembersToExcel() {
 // ==========================================
 // Print Monthly Member-wise Receipt Collection Report & Summary (A4 Layout)
 // Lists ONLY members who paid, organized strictly by Receipt Number & Amount
+
+// ==========================================
+// Print Monthly Member-wise Receipt Collection Report & Summary (A4 Layout)
+// STRICT CASH-ACCOUNTING: Lists ONLY receipts physically collected/posted in THIS month
+// Previous/Future months' advances are NOT included in this month's cash receipts.
 // ==========================================
 function generateMonthlyMemberCollectionReport(customMonth, customYear) {
     try {
@@ -5199,21 +5204,24 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
 
         const mosqueName = state.settings.mosque_name || state.settings.mosqueName || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_name : 'পূর্ব মোহাজের পাড়া জামে মসজিদ');
 
-        // 1. Gather all receipt postings for this month from state.transactions & state.subscriptions
+        // 1. Collect ONLY transactions/receipts that were PHYSICALLY POSTED IN THIS SELECTED MONTH (date starts with monthPrefix)
         const receiptMap = new Map();
 
-        // Check transactions in this month
+        // Check transactions with date in this selected month
         (state.transactions || []).forEach(tx => {
             if (tx.transaction_type !== 'INCOME') return;
             const txDate = tx.date || '';
-            const isThisMonth = txDate.startsWith(monthPrefix);
+            
+            // STRICT FILTER: The transaction/receipt date MUST be strictly within this selected month!
+            if (!txDate.startsWith(monthPrefix)) return;
+
             const isMemberFee = (tx.member_id && state.members.some(m => m.id === tx.member_id)) ||
                                 tx.category === 'Subscription' ||
                                 tx.category === 'সদস্য চাঁদা' ||
                                 tx.category === 'মাসিক চাঁদা' ||
                                 tx.is_member_fee;
 
-            if (isThisMonth && isMemberFee && parseFloat(tx.amount || 0) > 0) {
+            if (isMemberFee && parseFloat(tx.amount || 0) > 0) {
                 const member = (state.members || []).find(m => m.id === tx.member_id);
                 const rKey = (tx.receipt_no ? String(tx.receipt_no).trim() : '') || ('tx-' + tx.id);
                 
@@ -5225,15 +5233,16 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
                     amount: parseFloat(tx.amount || 0),
                     date: tx.date || '',
                     payment_mode: (tx.payment_mode === 'BANK' || tx.payment_method === 'BANK') ? 'ব্যাংক' : 'নগদ',
-                    description: tx.description || ('মাসিক চাঁদা (' + monthName + ' ' + yearBN + ')'),
+                    description: tx.description || ('মাসিক চাঁদা আদায় (' + monthName + ' ' + yearBN + ')'),
                     collector: tx.created_by || tx.collected_by || 'কোষাধ্যক্ষ'
                 });
             }
         });
 
-        // Also check subscriptions in this month to make sure no posted receipt is missed
+        // Also check subscriptions ONLY if their last_payment_date is strictly in THIS selected month
         (state.subscriptions || []).forEach(sub => {
-            if (sub.year === selectedYear && sub.month === selectedMonth && parseFloat(sub.amount_paid || 0) > 0) {
+            const payDate = sub.last_payment_date || '';
+            if (payDate.startsWith(monthPrefix) && parseFloat(sub.amount_paid || 0) > 0) {
                 const member = (state.members || []).find(m => m.id === sub.member_id);
                 const rNo = sub.receipt_no ? String(sub.receipt_no).trim() : '';
                 const rKey = rNo || ('sub-' + sub.member_id + '-' + sub.year + '-' + sub.month);
@@ -5251,9 +5260,9 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
                         member_name: member ? member.name : 'সদস্য',
                         phone: member ? (member.phone || '') : '',
                         amount: parseFloat(sub.amount_paid || 0),
-                        date: sub.last_payment_date || (monthPrefix + '-01'),
+                        date: payDate,
                         payment_mode: 'নগদ',
-                        description: member ? (member.name + ' - চাঁদা আদায় (' + monthName + ' ' + yearBN + ')') : 'মাসিক চাঁদা',
+                        description: member ? (member.name + ' - চাঁদা আদায় (রশিদ নং: ' + (rNo || '—') + ')') : 'মাসিক চাঁদা',
                         collector: collector || 'কোষাধ্যক্ষ'
                     });
                 }
@@ -5263,7 +5272,7 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
         const receiptList = Array.from(receiptMap.values());
 
         if (receiptList.length === 0) {
-            alert(monthName + ' ' + yearBN + ' খ্রি: মাসে এখনো কোনো চাঁদা আদায়ের রশিদ এন্ট্রি পাওয়া যায়নি!');
+            alert(monthName + ' ' + yearBN + ' খ্রি: মাসে চাঁদা আদায়ের কোনো নতুন রশিদ পোস্টিং এন্ট্রি পাওয়া যায়নি!');
             return;
         }
 
@@ -5305,7 +5314,14 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
             if (item.member_id) {
                 const realIndex = (state.members || []).findIndex(m => m.id === item.member_id) + 1;
                 if (realIndex > 0) {
-                    memberNumBN = englishToBanglaNum(String(realIndex).padStart(2, '0'));
+                    let cleanMemberNo = '';
+                    const mObj = state.members.find(m => m.id === item.member_id);
+                    if (mObj && mObj.member_no && !String(mObj.member_no).includes('bulk') && !String(mObj.member_no).includes('member-')) {
+                        cleanMemberNo = String(mObj.member_no);
+                    } else {
+                        cleanMemberNo = String(realIndex).padStart(2, '0');
+                    }
+                    memberNumBN = englishToBanglaNum(cleanMemberNo);
                 }
             }
 
@@ -5334,7 +5350,7 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
                 '<div style="font-size: 16px; font-weight: 800; color: #0d47a1; margin-top: 2px;">' +
                     englishToBanglaNum(totalReceiptsCount.toString()) + ' টি রশিদ' +
                 '</div>' +
-                '<div style="font-size: 9.5px; color: #555; margin-top: 1px;">(পোস্টিং সম্পন্ন)</div>' +
+                '<div style="font-size: 9.5px; color: #555; margin-top: 1px;">(' + monthName + ' মাসে পোস্টিং)</div>' +
             '</div>' +
 
             '<div style="background: #e8f5e9; border: 1.5px solid #a5d6a7; border-radius: 8px; padding: 8px 10px; text-align: center;">' +
@@ -5392,7 +5408,7 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear) {
         '@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }' +
         getPadCSS() +
         '</style></head><body>' +
-        getPadHeaderHTML('রশিদ নম্বর ভিত্তিক চাঁদা আদায় বিবরণী', 'মাস: ' + monthName + ' ' + yearBN + ' খ্রি:', 'রশিদ-আদায়/' + yearBN + '/' + monthNumBN, printDate) +
+        getPadHeaderHTML('রশিদ নম্বর ভিত্তিক চাঁদা আদায় বিবরণী', 'মাস: ' + monthName + ' ' + yearBN + ' খ্রি: (চলতি মাসের পোস্টিং)', 'রশিদ-আদায়/' + yearBN + '/' + monthNumBN, printDate) +
         summaryKpiHtml +
         '<table><thead><tr>' +
         '<th style="width: 5%;">ক্র.নং</th>' +
