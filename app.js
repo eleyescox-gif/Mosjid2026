@@ -60,6 +60,28 @@ let state = {
 window.state = state;
 
 // Universal Transaction Deduplicator (Removes accidental double-postings)
+
+// Auto-correct wrongly dated Imam salary transaction from March 2026 to 04/09/2026 (4 September 2026)
+function fixImamSalaryTransactionDate() {
+    if (!state.transactions || !Array.isArray(state.transactions)) return false;
+    let changed = false;
+
+    state.transactions.forEach(tx => {
+        if (!tx) return;
+        const isImamSalary = tx.category === 'ImamSalary' || 
+                             (tx.description && tx.description.includes('ইমাম')) ||
+                             (parseFloat(tx.amount || 0) === 6600 && tx.transaction_type === 'EXPENSE');
+        
+        if (isImamSalary && tx.date && (tx.date.startsWith('2026-03') || tx.date === '2026-03-04')) {
+            console.log('✅ Corrected Imam salary transaction date from', tx.date, 'to 2026-09-04');
+            tx.date = '2026-09-04';
+            changed = true;
+        }
+    });
+
+    return changed;
+}
+
 function deduplicateTransactions() {
     if (!state.transactions || !Array.isArray(state.transactions)) return false;
     
@@ -125,6 +147,7 @@ window.syncStateFromCloud = function(cloudState) {
     }
     state.transactions = ensureArray(cloudState.transactions);
     deduplicateTransactions();
+    fixImamSalaryTransactionDate();
     state.subscriptions = ensureArray(cloudState.subscriptions);
     state.committee = ensureArray(cloudState.committee);
     state.global_recycle_bin = recycleBin;
@@ -464,7 +487,9 @@ function loadState() {
     applySettingsToUI();
     
     // Auto-clean any accidental double-posting
-    if (deduplicateTransactions()) { saveState(); }
+    const cleanedDupes = deduplicateTransactions();
+    const fixedImamDate = fixImamSalaryTransactionDate();
+    if (cleanedDupes || fixedImamDate) { saveState(); }
     
     // Process any pending advance payments
     processAdvanceDeductions();
@@ -1982,6 +2007,9 @@ function openMemberDetails(memberId) {
         document.getElementById('epAmount').value = '';
         document.getElementById('epAmount').removeAttribute('max'); // Remove max limit so they can pay any amount!
         document.getElementById('epReceiptNo').value = '';
+        const nowDt = new Date();
+        const curMStart = nowDt.getFullYear() + '-' + String(nowDt.getMonth() + 1).padStart(2, '0') + '-01';
+        if (document.getElementById('epDate')) { document.getElementById('epDate').min = curMStart; }
         
         // Programmatically bind events for absolute cross-browser reliability
         const epAmountInput = document.getElementById('epAmount');
