@@ -1546,3 +1546,12 @@ textarea.form-control {
     background-color: rgba(220, 53, 69, 0.08);
     border: 1px solid rgba(220, 53, 69, 0.15);
 }
+
+/* Bulk Due SMS Modal styling */
+.bulk-due-member-row:hover {
+    background-color: #f7fafc;
+}
+.bulk-due-member-row:last-child {
+    border-bottom: none !important;
+}
+

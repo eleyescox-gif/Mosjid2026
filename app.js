@@ -37,7 +37,12 @@ const DEFAULT_SETTINGS = {
     logo_base64: '', // Base64 Data URL for logo
     bank_account_no: '',
     initial_bank_balance: 0,
-    initial_cash_balance: 0
+    initial_cash_balance: 0,
+    sms_gateway: {
+        api_key: '',
+        caller_id: '1234',
+        due_template: 'সম্মানিত {name}, {mosque_name}-এ আপনার বকেয়া চাঁদা ৳{due_amount}। অনুগ্রহ করে দ্রুত পরিশোধ করুন। ধন্যবাদ।'
+    }
 };
 
 // Global App State
@@ -62,6 +67,11 @@ window.state = state;
 // Universal Transaction Deduplicator (Removes accidental double-postings)
 
 // Auto-correct wrongly dated Imam salary transaction from March 2026 to 04/09/2026 (4 September 2026)
+
+
+
+
+
 function fixImamSalaryTransactionDate() {
     if (!state.transactions || !Array.isArray(state.transactions)) return false;
     let changed = false;
@@ -172,7 +182,6 @@ window.syncStateFromCloud = function(cloudState) {
 
 // Temporary holder for uploaded logo file
 let uploadedLogoBase64 = '';
-
 // Initialize Application
 document.addEventListener("DOMContentLoaded", () => {
     // Set default dates to current date
@@ -486,7 +495,6 @@ function loadState() {
     // Apply Settings (Name, Address, Logo) to UI
     applySettingsToUI();
     
-    // Auto-clean any accidental double-posting
     const cleanedDupes = deduplicateTransactions();
     const fixedImamDate = fixImamSalaryTransactionDate();
     if (cleanedDupes || fixedImamDate) { saveState(); }
@@ -660,9 +668,12 @@ function applyRolePermissions() {
     const settingsSec = document.getElementById('mosqueSettingsSection');
     const commSection = document.getElementById('adminCommitteeSection');
     const binSection = document.getElementById('adminRecycleBinSection');
+    const globalBinSec = document.getElementById('adminGlobalRecycleBinSection');
+    const jsonBackupSec = document.getElementById('adminJsonBackupSection');
     const bulkImportSec = document.getElementById('adminBulkImportSection');
     const adayKhataSec = document.getElementById('adminAdayKhataSection');
     const exportSec = document.getElementById('adminExportSection');
+    const smsGatewaySec = document.getElementById('adminSmsGatewaySection');
 
     // Default states (Closed/Hidden for general safety)
     navTx.style.display = 'none';
@@ -677,6 +688,9 @@ function applyRolePermissions() {
     settingsSec.style.display = 'none';
     commSection.style.display = 'none';
     if (binSection) binSection.style.display = 'none';
+    if (globalBinSec) globalBinSec.style.display = 'none';
+    if (jsonBackupSec) jsonBackupSec.style.display = 'none';
+    if (smsGatewaySec) smsGatewaySec.style.display = 'none';
     if (bulkImportSec) bulkImportSec.style.display = 'none';
     if (adayKhataSec) adayKhataSec.style.display = 'none';
     if (exportSec) exportSec.style.display = 'none';
@@ -694,7 +708,19 @@ function applyRolePermissions() {
         systemControls.style.display = 'block';
         settingsSec.style.display = 'block';
         commSection.style.display = 'block'; // Admin can manage committee members
-        if (binSection) binSection.style.display = 'block'; // Admin sees recycle bin
+        if (binSection) {
+            binSection.style.display = 'block'; // Admin sees member recycle bin
+            if (typeof renderRecycleBin === 'function') renderRecycleBin();
+        }
+        if (globalBinSec) {
+            globalBinSec.style.display = 'block'; // Admin sees 30-day global DB recycle bin
+            if (typeof renderGlobalRecycleBin === 'function') renderGlobalRecycleBin();
+        }
+        if (jsonBackupSec) jsonBackupSec.style.display = 'block'; // Admin sees JSON DB backup/restore
+        if (smsGatewaySec) {
+            smsGatewaySec.style.display = 'block'; // Admin sees SMS Gateway section
+            if (typeof populateSmsGatewayInputs === 'function') populateSmsGatewayInputs();
+        }
         if (bulkImportSec) bulkImportSec.style.display = 'block'; // Admin sees bulk import section
         if (adayKhataSec) adayKhataSec.style.display = 'block'; // Admin sees Aday Khata section
         if (exportSec) exportSec.style.display = 'block'; // Admin sees Excel export section
@@ -805,6 +831,7 @@ function populateSettingsInputs() {
         renderAdminCommitteeEditor();
         renderRecycleBin();
         renderGlobalRecycleBin();
+        if (typeof populateSmsGatewayInputs === 'function') populateSmsGatewayInputs();
         handleRoleSelectChange(); // Load recovery phone number for currently selected role
     }
 }
@@ -1193,6 +1220,8 @@ function refreshAppUI() {
     renderMembersList();
     loadReports();
     renderCommitteeDashboard();
+    if (typeof renderRecycleBin === 'function') renderRecycleBin();
+    if (typeof renderGlobalRecycleBin === 'function') renderGlobalRecycleBin();
 }
 
 // Calculate Balances
@@ -1835,12 +1864,11 @@ function renderStatementTable() {
                 var monthFee = member.member_type === 'Free' ? 0 : (parseFloat(member.monthly_fee) || 0);
                 var paidPrev = subPrev ? parseFloat(subPrev.amount_paid || 0) : 0;
                 runningArrear = (runningArrear + monthFee) - paidPrev;
-                if (runningArrear < 0) runningArrear = 0;
             }
         }
     }
 
-    var openingArrearForYear = runningArrear;
+    var openingArrearForYear = Math.max(0, runningArrear);
     var totalPaidSum = 0;
     var totalFeeSum = 0;
     var finalDue = 0;
@@ -1897,11 +1925,11 @@ function renderStatementTable() {
             }
             monthlyFee = 0;
         } else {
-            var currentMonthBokia = runningArrear;
-            var totalClaim = currentMonthBokia + monthlyFee;
-            var remainingDue = Math.max(0, totalClaim - paid);
+            var currentMonthBokia = Math.max(0, runningArrear);
+            var totalClaim = Math.max(0, runningArrear + monthlyFee);
+            runningArrear = (runningArrear + monthlyFee) - paid;
+            var remainingDue = Math.max(0, runningArrear);
 
-            runningArrear = remainingDue;
             totalFeeSum += monthlyFee;
             totalPaidSum += paid;
 
@@ -1914,7 +1942,7 @@ function renderStatementTable() {
             }
         }
 
-        finalDue = runningArrear;
+        finalDue = Math.max(0, runningArrear);
 
         var tr = document.createElement('tr');
         tr.style.cssText = rowStyle;
@@ -2133,6 +2161,17 @@ function openMemberDetails(memberId) {
                 };
                 actionSection.appendChild(requestBtn);
             }
+        }
+    }
+
+    // Configure Send Due SMS button
+    const sendSmsBtn = document.getElementById('mdSendSmsBtn');
+    if (sendSmsBtn) {
+        if ((role === 'admin' || role === 'secretary' || role === 'cashier') && totalDue > 0 && member.phone) {
+            sendSmsBtn.style.display = 'flex';
+            sendSmsBtn.onclick = () => openSendMemberDueSmsModal(member.id);
+        } else {
+            sendSmsBtn.style.display = 'none';
         }
     }
 
@@ -3491,9 +3530,12 @@ function renderGlobalRecycleBin() {
 
 // Restore entire database from global recycle bin snapshot
 window.restoreGlobalRecycleBin = function(index) {
-    if (confirm("আপনি কি নিশ্চিতভাবে এই ডাটাবেসটি রিস্টোর করতে চান? আপনার বর্তমান ডাটা এর ফলে ওভাররাইট হয়ে যাবে।")) {
+    if (confirm("আপনি কি নিশ্চিতভাবে এই ডাটাবেসটি রিস্টোর করতে চান? আপনার বর্তমান ডাটাবেসটির একটি ব্যাকআপ রিসাইকেল বিনে যুক্ত থাকবে।")) {
         const snapshot = state.global_recycle_bin[index];
         if (!snapshot) return;
+
+        // Take safety snapshot of current state before restoring
+        backupToRecycleBin();
 
         // Restore active arrays
         state.members = JSON.parse(JSON.stringify(snapshot.members || []));
@@ -3503,11 +3545,9 @@ window.restoreGlobalRecycleBin = function(index) {
             state.committee = JSON.parse(JSON.stringify(snapshot.committee));
         }
 
-        // Remove from recycle bin
-        state.global_recycle_bin.splice(index, 1);
-        
         saveState();
         refreshAppUI();
+        if (typeof renderGlobalRecycleBin === 'function') renderGlobalRecycleBin();
         alert("সফলভাবে ডাটাবেসটি রিস্টোর করা হয়েছে!");
     }
 };
@@ -4157,19 +4197,19 @@ function generateSingleMemberKhata() {
                 var fee = member.member_type === 'Free' ? 0 : (parseFloat(member.monthly_fee) || 0);
                 var paid = sub ? parseFloat(sub.amount_paid || 0) : 0;
                 runningArrear = (runningArrear + fee) - paid;
-                if (runningArrear < 0) runningArrear = 0;
             }
         }
     }
 
-    var initialBokiaForYear = runningArrear;
+    var initialBokiaForYear = Math.max(0, runningArrear);
 
     months.forEach(function(monthName, index) {
         var mNum = index + 1;
         var isFutureMonth = (selectedYear > currentYear) || (selectedYear === currentYear && mNum > currentMonth);
+        var isBeforeJoin = (selectedYear === joinYear && mNum < joinMonth) || (selectedYear < joinYear);
         var sub = state.subscriptions.find(function(s) { return s.member_id === member.id && s.year === selectedYear && s.month === mNum; });
 
-        var monthlyFee = member.member_type === 'Free' ? 0 : (parseFloat(member.monthly_fee) || 0);
+        var monthlyFee = (member.member_type === 'Free' || isBeforeJoin) ? 0 : (parseFloat(member.monthly_fee) || 0);
         var paid = sub ? parseFloat(sub.amount_paid || 0) : 0;
 
         var currentMonthBokia = 0;
@@ -4185,7 +4225,9 @@ function generateSingleMemberKhata() {
             if (matchingTx) collector = matchingTx.created_by || matchingTx.collected_by || '';
         }
 
-        if (isFutureMonth) {
+        if (isBeforeJoin) {
+            remainingDueText = '—';
+        } else if (isFutureMonth) {
             if (paid > 0) {
                 remainingDueText = '<span style="color: #1b5e20;">পরিশোধিত (অগ্রিম)</span>';
                 totalPaidSum += paid;
@@ -4193,12 +4235,10 @@ function generateSingleMemberKhata() {
                 remainingDueText = '—';
             }
         } else {
-            currentMonthBokia = runningArrear;
-            totalClaim = currentMonthBokia + monthlyFee;
-            remainingDue = totalClaim - paid;
-            if (remainingDue < 0) remainingDue = 0;
-
-            runningArrear = remainingDue;
+            currentMonthBokia = Math.max(0, runningArrear);
+            totalClaim = Math.max(0, runningArrear + monthlyFee);
+            runningArrear = (runningArrear + monthlyFee) - paid;
+            remainingDue = Math.max(0, runningArrear);
 
             if (member.member_type === 'Free') {
                 remainingDueText = '<span style="color: #1565c0;">মওকুফ</span>';
@@ -4380,19 +4420,19 @@ function generateAllMembersKhata() {
                     const fee = member.member_type === 'Free' ? 0 : (parseFloat(member.monthly_fee) || 0);
                     const paid = sub ? parseFloat(sub.amount_paid || 0) : 0;
                     runningArrear = (runningArrear + fee) - paid;
-                    if (runningArrear < 0) runningArrear = 0;
                 }
             }
         }
 
-        let initialBokiaForYear = runningArrear;
+        let initialBokiaForYear = Math.max(0, runningArrear);
 
         months.forEach((monthName, index) => {
             const mNum = index + 1;
             const isFutureMonth = (selectedYear > currentYear) || (selectedYear === currentYear && mNum > currentMonth);
+            const isBeforeJoin = (selectedYear === joinYear && mNum < joinMonth) || (selectedYear < joinYear);
             const sub = state.subscriptions.find(s => s.member_id === member.id && s.year === selectedYear && s.month === mNum);
             
-            let monthlyFee = member.member_type === 'Free' ? 0 : (parseFloat(member.monthly_fee) || 0);
+            let monthlyFee = (member.member_type === 'Free' || isBeforeJoin) ? 0 : (parseFloat(member.monthly_fee) || 0);
             let paid = sub ? parseFloat(sub.amount_paid || 0) : 0;
 
             let currentMonthBokia = 0;
@@ -4408,7 +4448,9 @@ function generateAllMembersKhata() {
                 if (matchingTx) collector = matchingTx.created_by || matchingTx.collected_by || '';
             }
 
-            if (isFutureMonth) {
+            if (isBeforeJoin) {
+                remainingDueText = '—';
+            } else if (isFutureMonth) {
                 // Future months: do NOT calculate fee or claim debt
                 if (paid > 0) {
                     remainingDueText = '<span style="color: #1b5e20;">পরিশোধিত (অগ্রিম)</span>';
@@ -4418,12 +4460,10 @@ function generateAllMembersKhata() {
                 }
             } else {
                 // Past and Current Months: calculate claims and arrears
-                currentMonthBokia = runningArrear;
-                totalClaim = currentMonthBokia + monthlyFee;
-                remainingDue = totalClaim - paid;
-                if (remainingDue < 0) remainingDue = 0;
-
-                runningArrear = remainingDue;
+                currentMonthBokia = Math.max(0, runningArrear);
+                totalClaim = Math.max(0, runningArrear + monthlyFee);
+                runningArrear = (runningArrear + monthlyFee) - paid;
+                remainingDue = Math.max(0, runningArrear);
 
                 if (member.member_type === 'Free') {
                     remainingDueText = '<span style="color: #1565c0;">মওকুফ</span>';
@@ -5240,6 +5280,182 @@ function exportMembersToExcel() {
     XLSX.writeFile(workbook, `Member_List_${dateStr}.xlsx`);
 }
 
+// ==========================================
+// Complete Database JSON Backup & Restore System
+// ==========================================
+
+function exportDatabaseToJSON() {
+    try {
+        if (!state.currentUser || state.currentUser.role !== 'admin') {
+            alert("শুধুমাত্র এডমিন ডাটাবেস ব্যাকআপ ডাউনলোড করতে পারবেন!");
+            return;
+        }
+
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const hh = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+
+        const filename = `mosque_finance_backup_${yyyy}-${mm}-${dd}_${hh}-${min}.json`;
+
+        const backupData = {
+            version: '2.0.0',
+            system: 'Mosque Finance Management System',
+            exportDate: now.toISOString(),
+            institution: state.settings?.mosque_name || 'পূর্ব মোহাজের পাড়া জামে মসজিদ',
+            settings: state.settings || {},
+            members: state.members || [],
+            transactions: state.transactions || [],
+            subscriptions: state.subscriptions || [],
+            committee: state.committee || [],
+            users: state.users || {},
+            global_recycle_bin: state.global_recycle_bin || []
+        };
+
+        const jsonStr = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        const membersCount = englishToBanglaNum((state.members || []).length.toString());
+        const txCount = englishToBanglaNum((state.transactions || []).length.toString());
+        const subCount = englishToBanglaNum((state.subscriptions || []).length.toString());
+
+        alert(`সফলভাবে সম্পূর্ণ ডাটাবেস ব্যাকআপ ফাইল (.json) ডাউনলোড হয়েছে!\n\n` +
+              `ফাইলের নাম: ${filename}\n` +
+              `• মোট সদস্য: ${membersCount} জন\n` +
+              `• মোট লেনদেন: ${txCount} টি\n` +
+              `• মোট চাঁদা রেকর্ড: ${subCount} টি`);
+    } catch (err) {
+        console.error("JSON Export Error:", err);
+        alert("ডাটাবেস ব্যাকআপ তৈরি করতে সমস্যা হয়েছে: " + err.message);
+    }
+}
+window.exportDatabaseToJSON = exportDatabaseToJSON;
+
+function restoreDatabaseFromJSON(event) {
+    const fileInput = event.target;
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        return;
+    }
+
+    if (!state.currentUser || state.currentUser.role !== 'admin') {
+        alert("শুধুমাত্র এডমিন ডাটাবেস রিস্টোর করতে পারবেন!");
+        fileInput.value = '';
+        return;
+    }
+
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const content = e.target.result;
+            let parsed;
+            try {
+                parsed = JSON.parse(content);
+            } catch (jsonErr) {
+                throw new Error("ফাইলটি সঠিক JSON ফরম্যাটে নেই অথবা ক্ষতিগ্রস্ত হয়েছে।");
+            }
+
+            // Support unwrapping from Firebase RTDB export or direct backup format
+            let backup = parsed;
+            if (backup.mosque_app_data && backup.mosque_app_data.main_state) {
+                backup = backup.mosque_app_data.main_state;
+            } else if (backup.main_state) {
+                backup = backup.main_state;
+            }
+
+            if (!backup || typeof backup !== 'object') {
+                throw new Error("ফাইলটিতে সঠিক ডাটাবেস কাঠামো পাওয়া যায়নি।");
+            }
+
+            const members = Array.isArray(backup.members) ? backup.members : [];
+            const transactions = Array.isArray(backup.transactions) ? backup.transactions : [];
+            const subscriptions = Array.isArray(backup.subscriptions) ? backup.subscriptions : [];
+            const committee = Array.isArray(backup.committee) ? backup.committee : [];
+
+            if (members.length === 0 && transactions.length === 0 && !backup.settings) {
+                throw new Error("ফাইলটিতে কোনো সদস্য, লেনদেন বা সেটিংস ডাটা পাওয়া যায়নি।");
+            }
+
+            const confirmMsg = `আপনি কি নিশ্চিতভাবে এই ব্যাকআপ ফাইলটি রিস্টোর করতে চান?\n\n` +
+                               `ব্যাকআপ ফাইলের বিবরণ:\n` +
+                               `• সদস্য সংখ্যা: ${englishToBanglaNum(members.length.toString())} জন\n` +
+                               `• লেনদেন সংখ্যা: ${englishToBanglaNum(transactions.length.toString())} টি\n` +
+                               `• চাঁদা রেকর্ড: ${englishToBanglaNum(subscriptions.length.toString())} টি\n` +
+                               `• পরিচালনা কমিটি: ${englishToBanglaNum(committee.length.toString())} জন\n\n` +
+                               `[নিরাপত্তা সতর্কতা]: রিস্টোর সম্পন্ন হলে বর্তমান ডাটাবেস প্রতিস্থাপিত হবে। তবে আপনার বর্তমান সকল তথ্যের একটি ব্যাকআপ স্বয়ংক্রিয়ভাবে ৩০ দিনের জন্য 'ডাটাবেস রিসাইকেল বিন'-এ সংরক্ষিত থাকবে।`;
+
+            if (!confirm(confirmMsg)) {
+                fileInput.value = '';
+                return;
+            }
+
+            // 1. Mandatory snapshot into 30-day recycle bin before overwrite
+            backupToRecycleBin();
+
+            // 2. Safely replace state
+            state.members = JSON.parse(JSON.stringify(members));
+            state.transactions = JSON.parse(JSON.stringify(transactions));
+            state.subscriptions = JSON.parse(JSON.stringify(subscriptions));
+            if (committee.length > 0) {
+                state.committee = JSON.parse(JSON.stringify(committee));
+            }
+            if (backup.settings && typeof backup.settings === 'object') {
+                state.settings = { ...DEFAULT_SETTINGS, ...backup.settings };
+            }
+            if (backup.users && typeof backup.users === 'object' && Object.keys(backup.users).length > 0) {
+                state.users = { ...DEFAULT_USERS, ...backup.users };
+            }
+
+            // 3. Preserve recent snapshots and merge any snapshots in imported backup
+            if (Array.isArray(backup.global_recycle_bin)) {
+                backup.global_recycle_bin.forEach(snap => {
+                    if (snap && snap.deletedAt && !state.global_recycle_bin.some(s => s.deletedAt === snap.deletedAt)) {
+                        state.global_recycle_bin.push(snap);
+                    }
+                });
+            }
+
+            // 4. Save to LocalStorage and push to Firebase RTDB
+            saveState();
+
+            // 5. Update UI
+            applySettingsToUI();
+            calculateFundBalances();
+            refreshAppUI();
+            if (typeof renderGlobalRecycleBin === 'function') renderGlobalRecycleBin();
+            if (typeof renderRecycleBin === 'function') renderRecycleBin();
+
+            alert("ডাটাবেস সফলভাবে রিস্টোর করা হয়েছে এবং ফায়ারবেস ক্লাউডে সিঙ্ক করা হয়েছে!\n\nপূর্ববর্তী ডাটাবেসের একটি কপি ৩০ দিনের জন্য 'ডাটাবেস রিসাইকেল বিন'-এ সুরক্ষিত আছে।");
+        } catch (err) {
+            console.error("JSON Restore Error:", err);
+            alert("ডাটাবেস রিস্টোর করতে ব্যর্থ হয়েছে!\nকারণ: " + err.message);
+        } finally {
+            fileInput.value = '';
+        }
+    };
+
+    reader.onerror = function() {
+        alert("ফাইলটি পড়তে ত্রুটি হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।");
+        fileInput.value = '';
+    };
+
+    reader.readAsText(file);
+}
+window.restoreDatabaseFromJSON = restoreDatabaseFromJSON;
+
 
 
 // ==========================================
@@ -5378,92 +5594,42 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear, customMo
         const avgPerReceipt = totalReceiptsCount > 0 ? (totalCollectedAmount / totalReceiptsCount) : 0;
         const paidWords = totalCollectedAmount > 0 ? numberToBanglaWords(totalCollectedAmount) : 'শূন্য টাকা মাত্র';
 
-        // 4. Generate Table Rows
+        // 4. Generate Table Rows (6 columns: ক্র:নং, সদস্য নাম, তারিখ, রশিদ নং, চাঁদা, বকেয়া)
         let tableRowsHtml = '';
         receiptList.forEach((item, index) => {
             const slBN = englishToBanglaNum((index + 1).toString());
             const receiptNoBN = (item.receipt_no && item.receipt_no !== '—') ? englishToBanglaNum(item.receipt_no) : '—';
-            
-            // Member sequence number if member exists
-            let memberNumBN = '—';
-            if (item.member_id) {
-                const realIndex = (state.members || []).findIndex(m => m.id === item.member_id) + 1;
-                if (realIndex > 0) {
-                    let cleanMemberNo = '';
-                    const mObj = state.members.find(m => m.id === item.member_id);
-                    if (mObj && mObj.member_no && !String(mObj.member_no).includes('bulk') && !String(mObj.member_no).includes('member-')) {
-                        cleanMemberNo = String(mObj.member_no);
-                    } else {
-                        cleanMemberNo = String(realIndex).padStart(2, '0');
-                    }
-                    memberNumBN = englishToBanglaNum(cleanMemberNo);
-                }
-            }
-
             const dateBN = item.date ? formatDate(item.date) : '—';
             const amountBN = englishToBanglaNum(item.amount.toFixed(2));
-            const phoneBN = item.phone ? englishToBanglaNum(item.phone) : '—';
+            
+            // Calculate current total due for this member
+            const memberDue = item.member_id ? calculateMemberTotalDue(item.member_id) : 0;
+            const dueDisplay = memberDue > 0 ? 
+                ('<span style="color: #b71c1c; font-weight: 700;">৳ ' + englishToBanglaNum(memberDue.toFixed(2)) + '</span>') : 
+                ('<span style="color: #1b5e20; font-weight: 700;">পরিশোধিত</span>');
 
             tableRowsHtml += '<tr>' +
                 '<td style="text-align:center; font-weight:600;">' + slBN + '</td>' +
-                '<td style="text-align:center; font-weight:800; color:#0d47a1; font-size:12px; background:#f0f7ff;">' + receiptNoBN + '</td>' +
-                '<td style="text-align:center; font-weight:600;">' + memberNumBN + '</td>' +
                 '<td style="text-align:left; font-weight:700; padding-left:8px;">' + item.member_name + '</td>' +
-                '<td style="text-align:center;">' + phoneBN + '</td>' +
                 '<td style="text-align:center; font-size:11px;">' + dateBN + '</td>' +
-                '<td style="text-align:center; font-size:11px;">' + item.payment_mode + '</td>' +
-                '<td style="text-align:left; font-size:11px; padding-left:6px;">' + item.description + '</td>' +
-                '<td style="text-align:center; font-size:11px;">' + item.collector + '</td>' +
+                '<td style="text-align:center; font-weight:800; color:#0d47a1; font-size:12px; background:#f0f7ff;">' + receiptNoBN + '</td>' +
                 '<td style="text-align:right; font-weight:800; color:#1b5e20; font-size:12px; background:#f4faf6; padding-right:8px;">৳ ' + amountBN + '</td>' +
+                '<td style="text-align:right; font-size:11px; padding-right:8px;">' + dueDisplay + '</td>' +
             '</tr>';
         });
 
-        // 5. Summary KPI Cards on Top
-        const summaryKpiHtml = '<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px;">' +
-            '<div style="background: #e3f2fd; border: 1.5px solid #90caf9; border-radius: 8px; padding: 8px 10px; text-align: center;">' +
-                '<div style="font-size: 10.5px; color: #1565c0; font-weight: 600;">মোট ইস্যুকৃত রশিদ</div>' +
-                '<div style="font-size: 16px; font-weight: 800; color: #0d47a1; margin-top: 2px;">' +
-                    englishToBanglaNum(totalReceiptsCount.toString()) + ' টি রশিদ' +
-                '</div>' +
-                '<div style="font-size: 9.5px; color: #555; margin-top: 1px;">(' + monthName + ' মাসে পোস্টিং)</div>' +
-            '</div>' +
-
-            '<div style="background: #e8f5e9; border: 1.5px solid #a5d6a7; border-radius: 8px; padding: 8px 10px; text-align: center;">' +
-                '<div style="font-size: 10.5px; color: #2e7d32; font-weight: 600;">চাঁদা প্রদানকারী সদস্য</div>' +
-                '<div style="font-size: 16px; font-weight: 800; color: #1b5e20; margin-top: 2px;">' +
-                    englishToBanglaNum(totalPayersCount.toString()) + ' জন' +
-                '</div>' +
-                '<div style="font-size: 9.5px; color: #555; margin-top: 1px;">(পরিশোধকারী তালিকা)</div>' +
-            '</div>' +
-
-            '<div style="background: #f1f8e9; border: 1.5px solid #c5e1a5; border-radius: 8px; padding: 8px 10px; text-align: center;">' +
-                '<div style="font-size: 10.5px; color: #33691e; font-weight: 600;">রশিদ অনুযায়ী মোট আদায়</div>' +
-                '<div style="font-size: 16px; font-weight: 800; color: #1b5e20; margin-top: 2px;">' +
-                    '৳ ' + englishToBanglaNum(totalCollectedAmount.toFixed(2)) +
-                '</div>' +
-                '<div style="font-size: 9.5px; color: #2e7d32; font-weight: 700; margin-top: 1px;">' + monthName + ' ' + yearBN + '</div>' +
-            '</div>' +
-
-            '<div style="background: #fff8e1; border: 1.5px solid #ffe082; border-radius: 8px; padding: 8px 10px; text-align: center;">' +
-                '<div style="font-size: 10.5px; color: #f57f17; font-weight: 600;">গড় আদায় প্রতি রশিদ</div>' +
-                '<div style="font-size: 15px; font-weight: 800; color: #e65100; margin-top: 2px;">' +
-                    '৳ ' + englishToBanglaNum(avgPerReceipt.toFixed(2)) +
-                '</div>' +
-                '<div style="font-size: 9.5px; color: #777; margin-top: 1px;">(চলতি মাসের গড়)</div>' +
-            '</div>' +
-        '</div>';
-
-        // 6. Total Row at Bottom
+        // 5. Total Row at Bottom (aligned with 6 columns)
         const totalRowHtml = '<tr style="background-color: #e8f5e9; font-weight: 800; border-top: 2.5px solid #000;">' +
-            '<td colspan="9" style="text-align: right; padding-right: 14px; font-size: 12px;">' +
+            '<td colspan="4" style="text-align: right; padding-right: 14px; font-size: 12px; font-weight: 800;">' +
                 'সর্বমোট আদায় (' + englishToBanglaNum(totalReceiptsCount.toString()) + ' টি রশিদে মোট ' + englishToBanglaNum(totalPayersCount.toString()) + ' জন সদস্য):' +
             '</td>' +
             '<td style="text-align: right; color: #1b5e20; font-weight: 800; font-size: 13px; padding-right: 8px; background: #dcedc8;">' +
                 '৳ ' + englishToBanglaNum(totalCollectedAmount.toFixed(2)) +
             '</td>' +
+            '<td style="background: #e8f5e9;"></td>' +
         '</tr>';
 
-        // 7. Full Printable HTML Document
+        // 6. Full Printable HTML Document
         const htmlDocument = '<!DOCTYPE html>' +
         '<html lang="bn"><head><meta charset="UTF-8">' +
         '<title>' + mosqueName + ' — রশিদ নম্বর ভিত্তিক চাঁদা আদায় তালিকা (' + monthName + ' ' + yearBN + ')</title>' +
@@ -5484,18 +5650,13 @@ function generateMonthlyMemberCollectionReport(customMonth, customYear, customMo
         getPadCSS() +
         '</style></head><body>' +
         getPadHeaderHTML('রশিদ নম্বর ভিত্তিক চাঁদা আদায় বিবরণী', 'মাস: ' + monthName + ' ' + yearBN + ' খ্রি: (চলতি মাসের পোস্টিং)', 'রশিদ-আদায়/' + yearBN + '/' + monthNumBN, printDate) +
-        summaryKpiHtml +
         '<table><thead><tr>' +
-        '<th style="width: 5%;">ক্র.নং</th>' +
-        '<th style="width: 10%;">রশিদ নং</th>' +
-        '<th style="width: 7%;">সদস্য নং</th>' +
-        '<th style="width: 19%; text-align: left; padding-left: 6px;">সদস্যের নাম</th>' +
-        '<th style="width: 13%;">মোবাইল</th>' +
-        '<th style="width: 11%;">তারিখ</th>' +
-        '<th style="width: 7%;">মাধ্যম</th>' +
-        '<th style="width: 14%; text-align: left; padding-left: 5px;">বিবরণ / খাত</th>' +
-        '<th style="width: 8%;">আদায়কারী</th>' +
-        '<th style="width: 11%; text-align: right; padding-right: 6px;">পরিমাণ (৳)</th>' +
+        '<th style="width: 8%;">ক্র:নং</th>' +
+        '<th style="width: 28%; text-align: left; padding-left: 8px;">সদস্য নাম</th>' +
+        '<th style="width: 16%;">তারিখ</th>' +
+        '<th style="width: 14%;">রশিদ নং</th>' +
+        '<th style="width: 17%; text-align: right; padding-right: 8px;">চাঁদা</th>' +
+        '<th style="width: 17%; text-align: right; padding-right: 8px;">বকেয়া</th>' +
         '</tr></thead><tbody>' +
         tableRowsHtml +
         totalRowHtml +
@@ -5598,3 +5759,590 @@ function submitMonthlyCollectionReportFromModal() {
     closeModal('monthly-collection-filter-modal');
     generateMonthlyMemberCollectionReport(m, y, mode);
 }
+
+// ==========================================
+// SMS Gateway Integration (Bulk SMS Dhaka) & Member Due Dispatcher
+// ==========================================
+
+// Helper: Normalize BD Phone Number to standard 11-digit string (e.g. 01XXXXXXXXX)
+function cleanBDPhoneNumber(rawPhone) {
+    if (!rawPhone) return '';
+    let cleaned = rawPhone.toString().replace(/[^0-9]/g, '');
+    if (cleaned.startsWith('880')) {
+        cleaned = cleaned.substring(2);
+    }
+    if (cleaned.length === 11 && cleaned.startsWith('01')) {
+        return cleaned;
+    }
+    return cleaned;
+}
+window.cleanBDPhoneNumber = cleanBDPhoneNumber;
+
+// Helper: Calculate characters and SMS message parts (Bangla Unicode: 70/67 chars, English GSM: 160/153 chars)
+function calculateSmsParts(text) {
+    if (!text) return { length: 0, parts: 0, isUnicode: false };
+    // Check if contains non-ASCII characters (like Bengali)
+    const isUnicode = /[^\u0000-\u007F]/.test(text);
+    const len = text.length;
+    let parts = 1;
+    if (isUnicode) {
+        if (len <= 70) parts = 1;
+        else parts = Math.ceil(len / 67);
+    } else {
+        if (len <= 160) parts = 1;
+        else parts = Math.ceil(len / 153);
+    }
+    return { length: len, parts, isUnicode };
+}
+window.calculateSmsParts = calculateSmsParts;
+
+function updateSmsCharCounter(text) {
+    const el = document.getElementById('smsTemplateCharCount');
+    if (!el) return;
+    const info = calculateSmsParts(text);
+    el.innerText = `${englishToBanglaNum(info.length.toString())} অক্ষর (${englishToBanglaNum(info.parts.toString())} SMS)`;
+}
+window.updateSmsCharCounter = updateSmsCharCounter;
+
+function updateSingleSmsCharCounter(text) {
+    const el = document.getElementById('singleSmsCharCount');
+    if (!el) return;
+    const info = calculateSmsParts(text);
+    el.innerText = `${englishToBanglaNum(info.length.toString())} অক্ষর (${englishToBanglaNum(info.parts.toString())} SMS)`;
+}
+window.updateSingleSmsCharCounter = updateSingleSmsCharCounter;
+
+function toggleSmsApiKeyVisibility() {
+    const input = document.getElementById('smsApiKey');
+    const icon = document.getElementById('toggleApiKeyVisibility');
+    if (!input) return;
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (icon) icon.className = 'fa-solid fa-eye-slash';
+    } else {
+        input.type = 'password';
+        if (icon) icon.className = 'fa-solid fa-eye';
+    }
+}
+window.toggleSmsApiKeyVisibility = toggleSmsApiKeyVisibility;
+
+function insertSmsTag(tag) {
+    const textarea = document.getElementById('smsDueTemplate');
+    if (!textarea) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const val = textarea.value;
+    textarea.value = val.substring(0, start) + tag + val.substring(end);
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+    updateSmsCharCounter(textarea.value);
+}
+window.insertSmsTag = insertSmsTag;
+
+// Core SMS Dispatch Engine to bulksmsdhaka.net
+async function sendBulkSmsDhakaApi({ apikey, callerID, number, message }) {
+    const cleanNumber = cleanBDPhoneNumber(number);
+    if (!cleanNumber || cleanNumber.length !== 11) {
+        throw new Error(`ভুল বা অসম্পূর্ণ মোবাইল নম্বর (${number})`);
+    }
+    if (!apikey) {
+        throw new Error("এসএমএস গেটওয়ের API Key সেট করা নেই। এডমিন সেটিংস থেকে সেট করুন।");
+    }
+    if (!message || !message.trim()) {
+        throw new Error("এসএমএস বার্তা খালি থাকতে পারে না।");
+    }
+
+    const encodedMsg = encodeURIComponent(message.trim());
+    const encodedKey = encodeURIComponent(apikey.trim());
+    const encodedCaller = encodeURIComponent((callerID || '1234').trim());
+    const url = `https://bulksmsdhaka.net/api/sendtext?apikey=${encodedKey}&callerID=${encodedCaller}&number=${cleanNumber}&message=${encodedMsg}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            mode: 'cors'
+        });
+
+        const text = await response.text();
+        let json = null;
+        try {
+            json = JSON.parse(text);
+        } catch (parseErr) {
+            json = { raw: text };
+        }
+
+        // BulkSMSDhaka returns:
+        // Success: { "Status": "1000", "Success": "true", "Message": "Your sms request successful!!" }
+        // Failure: { "error": "Unauthenticated or Invalid API Key." } or Status !== "1000"
+        if (json.error) {
+            return { success: false, message: json.error, raw: json };
+        }
+        if (json.Success === "true" || json.Status === "1000" || json.status === "success") {
+            return { success: true, message: json.Message || 'এসএমএস সফলভাবে পৌঁছেছে', raw: json };
+        }
+        if (json.Success === "false" || json.Message) {
+            return { success: false, message: json.Message || 'ব্যর্থ হয়েছে', raw: json };
+        }
+
+        // If status is ok and not explicit error
+        if (response.ok) {
+            return { success: true, message: 'এসএমএস রিকোয়েস্ট গৃহীত হয়েছে', raw: json };
+        }
+        return { success: false, message: `সার্ভার রেসপন্স কোড: ${response.status}`, raw: json };
+    } catch (netErr) {
+        console.error("SMS Gateway Fetch Error:", netErr);
+        throw new Error("এসএমএস সার্ভারের সাথে সংযোগ করা যায়নি (" + netErr.message + ")");
+    }
+}
+window.sendBulkSmsDhakaApi = sendBulkSmsDhakaApi;
+
+// Populate SMS Gateway Inputs in Settings
+function populateSmsGatewayInputs() {
+    const gw = state.settings.sms_gateway || DEFAULT_SETTINGS.sms_gateway || {};
+    const keyInput = document.getElementById('smsApiKey');
+    const callerInput = document.getElementById('smsCallerId');
+    const tplInput = document.getElementById('smsDueTemplate');
+    const badge = document.getElementById('smsGatewayStatusBadge');
+
+    if (keyInput) keyInput.value = gw.api_key || '';
+    if (callerInput) callerInput.value = gw.caller_id || '1234';
+    if (tplInput) {
+        tplInput.value = gw.due_template || DEFAULT_SETTINGS.sms_gateway.due_template;
+        updateSmsCharCounter(tplInput.value);
+    }
+
+    if (badge) {
+        if (gw.api_key && gw.api_key.trim()) {
+            badge.innerHTML = '<i class="fa-solid fa-circle-check"></i> সংযুক্ত';
+            badge.style.background = '#e8f5e9';
+            badge.style.color = '#2e7d32';
+            badge.style.borderColor = '#a5d6a7';
+        } else {
+            badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> সেটআপ প্রয়োজন';
+            badge.style.background = '#fff8e1';
+            badge.style.color = '#f57f17';
+            badge.style.borderColor = '#ffe082';
+        }
+    }
+}
+window.populateSmsGatewayInputs = populateSmsGatewayInputs;
+
+// Save SMS Gateway Settings Form
+function handleSaveSmsGatewaySettings(e) {
+    if (e) e.preventDefault();
+    if (!state.currentUser || state.currentUser.role !== 'admin') {
+        alert("শুধুমাত্র এডমিন এসএমএস গেটওয়ে কনফিগারেশন পরিবর্তন করতে পারবেন!");
+        return;
+    }
+
+    const key = document.getElementById('smsApiKey')?.value.trim() || '';
+    const caller = document.getElementById('smsCallerId')?.value.trim() || '1234';
+    const tpl = document.getElementById('smsDueTemplate')?.value.trim() || DEFAULT_SETTINGS.sms_gateway.due_template;
+
+    if (!key) {
+        alert("অনুগ্রহ করে আপনার bulksmsdhaka.net এর API Key প্রদান করুন!");
+        return;
+    }
+
+    state.settings.sms_gateway = {
+        api_key: key,
+        caller_id: caller,
+        due_template: tpl
+    };
+
+    saveState();
+    populateSmsGatewayInputs();
+    alert("এসএমএস গেটওয়ে সেটিংস সফলভাবে সংরক্ষণ করা হয়েছে!");
+}
+window.handleSaveSmsGatewaySettings = handleSaveSmsGatewaySettings;
+
+// Send Quick Test SMS from Settings
+async function sendTestSms() {
+    const gw = state.settings.sms_gateway || {};
+    const key = gw.api_key || document.getElementById('smsApiKey')?.value.trim();
+    const caller = gw.caller_id || document.getElementById('smsCallerId')?.value.trim() || '1234';
+    const phone = document.getElementById('smsTestNumber')?.value.trim();
+
+    if (!key) {
+        alert("টেস্ট এসএমএস পাঠানোর আগে API Key সেভ করুন বা ঘরে লিখুন!");
+        return;
+    }
+    if (!phone) {
+        alert("অনুগ্রহ করে টেস্ট মোবাইল নম্বরটি লিখুন (যেমন: 01XXXXXXXXX)!");
+        return;
+    }
+
+    const cleanNum = cleanBDPhoneNumber(phone);
+    if (!cleanNum || cleanNum.length !== 11) {
+        alert("সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন!");
+        return;
+    }
+
+    const mosqueName = state.settings.mosque_name || DEFAULT_SETTINGS.mosque_name;
+    const testMsg = `${mosqueName}: এসএমএস গেটওয়ে টেস্ট বার্তা সফলভাবে পৌঁছেছে।`;
+
+    const btn = event?.currentTarget || event?.target;
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> পাঠানো হচ্ছে...';
+    }
+
+    try {
+        const res = await sendBulkSmsDhakaApi({
+            apikey: key,
+            callerID: caller,
+            number: cleanNum,
+            message: testMsg
+        });
+
+        if (res.success) {
+            alert(`টেস্ট এসএমএস সফলভাবে পাঠানো হয়েছে!\nনম্বর: ${cleanNum}\nবার্তা: ${testMsg}`);
+        } else {
+            alert(`টেস্ট এসএমএস পাঠাতে ব্যর্থ হয়েছে!\nকারণ: ${res.message}`);
+        }
+    } catch (err) {
+        alert("ত্রুটি: " + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+window.sendTestSms = sendTestSms;
+
+// Template string renderer for Due SMS
+function renderSmsDueText(template, member, dueAmount) {
+    if (!template) template = DEFAULT_SETTINGS.sms_gateway.due_template;
+    const mosqueName = state.settings.mosque_name || DEFAULT_SETTINGS.mosque_name;
+    const realIndex = (state.members || []).findIndex(m => m.id === member.id) + 1;
+    const memberNo = realIndex > 0 ? String(realIndex).padStart(2, '0') : '';
+
+    return template
+        .replace(/{name}/g, member.name || '')
+        .replace(/{member_no}/g, memberNo ? `সদস্য নং- ${memberNo}` : '')
+        .replace(/{due_amount}/g, englishToBanglaNum(dueAmount.toString()))
+        .replace(/{mosque_name}/g, mosqueName);
+}
+window.renderSmsDueText = renderSmsDueText;
+
+// Single Member Due SMS: Open Modal
+function openSendMemberDueSmsModal(memberId) {
+    const mId = memberId || state.activeMemberId;
+    const member = state.members.find(m => m.id === mId);
+    if (!member) {
+        alert("সদস্য পাওয়া যায়নি!");
+        return;
+    }
+
+    const dueAmount = calculateMemberTotalDue(member.id);
+    if (dueAmount <= 0) {
+        alert("এই সদস্যের কোনো বকেয়া চাঁদা নেই।");
+        return;
+    }
+
+    const cleanPhone = cleanBDPhoneNumber(member.phone);
+    if (!cleanPhone || cleanPhone.length !== 11) {
+        alert(`সদস্যের সঠিক মোবাইল নম্বর পাওয়া যায়নি (${member.phone || 'দেওয়া নেই'})!`);
+        return;
+    }
+
+    const gw = state.settings.sms_gateway || {};
+    if (!gw.api_key) {
+        if (confirm("এসএমএস গেটওয়ের API Key এখনও সেটআপ করা হয়নি। আপনি কি এখন সেটিংস পেজে গিয়ে সেটআপ করতে চান?")) {
+            closeModal('member-details-modal');
+            switchView('settings');
+        }
+        return;
+    }
+
+    document.getElementById('singleSmsMemberId').value = member.id;
+    document.getElementById('singleSmsMemberName').innerText = member.name;
+    document.getElementById('singleSmsMemberPhone').innerText = cleanPhone;
+    document.getElementById('singleSmsMemberDue').innerText = `৳ ${englishToBanglaNum(dueAmount.toFixed(2))}`;
+
+    const template = gw.due_template || DEFAULT_SETTINGS.sms_gateway.due_template;
+    const renderedMsg = renderSmsDueText(template, member, dueAmount);
+    
+    const textarea = document.getElementById('singleSmsMessage');
+    if (textarea) {
+        textarea.value = renderedMsg;
+        updateSingleSmsCharCounter(renderedMsg);
+    }
+
+    const statusBox = document.getElementById('singleSmsStatusContainer');
+    if (statusBox) statusBox.style.display = 'none';
+
+    openModal('send-due-sms-modal');
+}
+window.openSendMemberDueSmsModal = openSendMemberDueSmsModal;
+
+// Single Member Due SMS: Submit
+async function sendSingleMemberDueSms() {
+    const memberId = document.getElementById('singleSmsMemberId')?.value;
+    const member = state.members.find(m => m.id === memberId);
+    if (!member) return;
+
+    const message = document.getElementById('singleSmsMessage')?.value.trim();
+    if (!message) {
+        alert("এসএমএস বার্তা লিখুন!");
+        return;
+    }
+
+    const gw = state.settings.sms_gateway || {};
+    if (!gw.api_key) {
+        alert("এসএমএস গেটওয়ের API Key সেট করা নেই!");
+        return;
+    }
+
+    const btn = document.getElementById('singleSmsSendBtn');
+    const statusBox = document.getElementById('singleSmsStatusContainer');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> পাঠানো হচ্ছে...';
+    }
+
+    try {
+        const res = await sendBulkSmsDhakaApi({
+            apikey: gw.api_key,
+            callerID: gw.caller_id || '1234',
+            number: member.phone,
+            message: message
+        });
+
+        if (res.success) {
+            if (statusBox) {
+                statusBox.style.display = 'block';
+                statusBox.style.background = '#e8f5e9';
+                statusBox.style.color = '#1b5e20';
+                statusBox.style.border = '1px solid #c8e6c9';
+                statusBox.innerHTML = '<i class="fa-solid fa-circle-check"></i> সদস্যের কাছে সফলভাবে বকেয়া নোটিশ এসএমএস পৌঁছেছে!';
+            }
+            setTimeout(() => {
+                closeModal('send-due-sms-modal');
+                alert(`সদস্য ${member.name}-এর কাছে সফলভাবে বকেয়া নোটিশ এসএমএস পাঠানো হয়েছে।`);
+            }, 1200);
+        } else {
+            if (statusBox) {
+                statusBox.style.display = 'block';
+                statusBox.style.background = '#ffebee';
+                statusBox.style.color = '#c62828';
+                statusBox.style.border = '1px solid #ffcdd2';
+                statusBox.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> পাঠাতে ব্যর্থ: ${res.message}`;
+            }
+        }
+    } catch (err) {
+        if (statusBox) {
+            statusBox.style.display = 'block';
+            statusBox.style.background = '#ffebee';
+            statusBox.style.color = '#c62828';
+            statusBox.style.border = '1px solid #ffcdd2';
+            statusBox.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ত্রুটি: ${err.message}`;
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+window.sendSingleMemberDueSms = sendSingleMemberDueSms;
+
+// Bulk Due SMS: Open Modal
+function openBulkDueSmsModal() {
+    const gw = state.settings.sms_gateway || {};
+    if (!gw.api_key) {
+        alert("বাল্ক এসএমএস পাঠানোর পূর্বে এডমিন সেটিংস থেকে API Key ও Caller ID কনফিগার করুন!");
+        switchView('settings');
+        return;
+    }
+
+    // Filter active members who have dues and valid phone
+    const dueMembers = (state.members || []).filter(m => {
+        if (!m || m.status === 'Deleted' || m.delete_requested) return false;
+        const due = calculateMemberTotalDue(m.id);
+        const cleanPhone = cleanBDPhoneNumber(m.phone);
+        return due > 0 && cleanPhone.length === 11;
+    });
+
+    if (dueMembers.length === 0) {
+        alert("বর্তমানে বকেয়া রয়েছে এবং বৈধ মোবাইল নম্বর আছে এমন কোনো সদস্য পাওয়া যায়নি।");
+        return;
+    }
+
+    const container = document.getElementById('bulkDueMembersList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    dueMembers.forEach((m, idx) => {
+        const due = calculateMemberTotalDue(m.id);
+        const cleanPhone = cleanBDPhoneNumber(m.phone);
+        const realIndex = state.members.findIndex(mem => mem.id === m.id) + 1;
+        const displayNum = realIndex > 0 ? String(realIndex).padStart(2, '0') : (idx + 1);
+
+        const row = document.createElement('div');
+        row.className = 'bulk-due-member-row';
+        row.id = `bulkRow_${m.id}`;
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.justifyContent = 'space-between';
+        row.style.padding = '8px 10px';
+        row.style.borderBottom = '1px solid #edf2f7';
+        row.style.fontSize = '12px';
+
+        row.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" class="bulk-due-chk" data-member-id="${m.id}" data-due="${due}" checked onchange="updateBulkDueSelectedCount()" style="cursor: pointer; width: 14px; height: 14px;">
+                <div>
+                    <strong style="color: #2d3748;">সদস্য নং- ${displayNum}: ${m.name}</strong>
+                    <div style="font-size: 10.5px; color: #0277bd;">
+                        <i class="fa-solid fa-phone"></i> ${cleanPhone}
+                    </div>
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-weight: bold; color: var(--danger-color);">৳ ${englishToBanglaNum(due.toFixed(2))}</div>
+                <span class="bulk-sms-status" id="bulkStatus_${m.id}" style="font-size: 10px; color: #888;">অপেক্ষমাণ</span>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+
+    document.getElementById('bulkDueTotalMembersCount').innerText = englishToBanglaNum(dueMembers.length.toString());
+    document.getElementById('bulkDueSelectedMembersCount').innerText = englishToBanglaNum(dueMembers.length.toString());
+    document.getElementById('bulkDueSelectAll').checked = true;
+
+    // Preview template for the first member
+    const tpl = gw.due_template || DEFAULT_SETTINGS.sms_gateway.due_template;
+    const sampleDue = calculateMemberTotalDue(dueMembers[0].id);
+    const previewText = renderSmsDueText(tpl, dueMembers[0], sampleDue);
+    const previewEl = document.getElementById('bulkDueMessagePreview');
+    if (previewEl) previewEl.innerText = `"${previewText}"`;
+
+    // Reset progress bar
+    const progBox = document.getElementById('bulkDueProgressContainer');
+    if (progBox) progBox.style.display = 'none';
+
+    openModal('bulk-due-sms-modal');
+}
+window.openBulkDueSmsModal = openBulkDueSmsModal;
+
+function toggleBulkDueSelectAll(checked) {
+    const checkboxes = document.querySelectorAll('.bulk-due-chk');
+    checkboxes.forEach(cb => cb.checked = checked);
+    updateBulkDueSelectedCount();
+}
+window.toggleBulkDueSelectAll = toggleBulkDueSelectAll;
+
+function updateBulkDueSelectedCount() {
+    const checkboxes = document.querySelectorAll('.bulk-due-chk:checked');
+    const countEl = document.getElementById('bulkDueSelectedMembersCount');
+    if (countEl) countEl.innerText = englishToBanglaNum(checkboxes.length.toString());
+}
+window.updateBulkDueSelectedCount = updateBulkDueSelectedCount;
+
+// Bulk Due SMS: Execute sending
+async function sendBulkDueSms() {
+    const checkboxes = Array.from(document.querySelectorAll('.bulk-due-chk:checked'));
+    if (checkboxes.length === 0) {
+        alert("অনুগ্রহ করে অন্তত একজন সদস্য নির্বাচন করুন!");
+        return;
+    }
+
+    const gw = state.settings.sms_gateway || {};
+    if (!gw.api_key) {
+        alert("এসএমএস গেটওয়ের API Key সেট করা নেই!");
+        return;
+    }
+
+    const total = checkboxes.length;
+    if (!confirm(`আপনি কি নিশ্চিতভাবে নির্বাচিত ${englishToBanglaNum(total.toString())} জন সদস্যকে বকেয়া নোটিশ এসএমএস পাঠাতে চান?`)) {
+        return;
+    }
+
+    const sendBtn = document.getElementById('bulkDueSendBtn');
+    const progBox = document.getElementById('bulkDueProgressContainer');
+    const progBar = document.getElementById('bulkDueProgressBar');
+    const progText = document.getElementById('bulkDueProgressText');
+    const progPercent = document.getElementById('bulkDueProgressPercent');
+
+    if (progBox) progBox.style.display = 'block';
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> পাঠানো হচ্ছে...';
+    }
+
+    let successCount = 0;
+    let failedCount = 0;
+    const tpl = gw.due_template || DEFAULT_SETTINGS.sms_gateway.due_template;
+
+    for (let i = 0; i < total; i++) {
+        const cb = checkboxes[i];
+        const mId = cb.getAttribute('data-member-id');
+        const member = state.members.find(m => m.id === mId);
+        const statusEl = document.getElementById(`bulkStatus_${mId}`);
+
+        if (!member) continue;
+
+        const due = calculateMemberTotalDue(member.id);
+        const cleanPhone = cleanBDPhoneNumber(member.phone);
+        const msg = renderSmsDueText(tpl, member, due);
+
+        if (statusEl) {
+            statusEl.innerText = 'পাঠানো হচ্ছে...';
+            statusEl.style.color = '#0288d1';
+        }
+
+        try {
+            const res = await sendBulkSmsDhakaApi({
+                apikey: gw.api_key,
+                callerID: gw.caller_id || '1234',
+                number: cleanPhone,
+                message: msg
+            });
+
+            if (res.success) {
+                successCount++;
+                if (statusEl) {
+                    statusEl.innerText = '✓ সফল';
+                    statusEl.style.color = '#2e7d32';
+                    statusEl.style.fontWeight = 'bold';
+                }
+            } else {
+                failedCount++;
+                if (statusEl) {
+                    statusEl.innerText = `✗ ব্যর্থ (${res.message || 'ত্রুটি'})`;
+                    statusEl.style.color = '#c62828';
+                }
+            }
+        } catch (err) {
+            failedCount++;
+            if (statusEl) {
+                statusEl.innerText = `✗ ত্রুটি`;
+                statusEl.style.color = '#c62828';
+            }
+        }
+
+        // Update progress bar
+        const progress = Math.round(((i + 1) / total) * 100);
+        if (progBar) progBar.style.width = `${progress}%`;
+        if (progPercent) progPercent.innerText = `${englishToBanglaNum(progress.toString())}%`;
+        if (progText) progText.innerText = `পাঠানো হচ্ছে: ${englishToBanglaNum((i + 1).toString())}/${englishToBanglaNum(total.toString())}`;
+
+        // Delay 250ms between requests to respect rate-limit
+        await new Promise(resolve => setTimeout(resolve, 250));
+    }
+
+    if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = '<i class="fa-solid fa-check-double"></i> সম্পন্ন হয়েছে';
+    }
+    if (progText) {
+        progText.innerText = `সম্পন্ন! সফল: ${englishToBanglaNum(successCount.toString())} টি, ব্যর্থ: ${englishToBanglaNum(failedCount.toString())} টি`;
+    }
+
+    alert(`বাল্ক এসএমএস প্রেরণ সম্পন্ন হয়েছে!\n\n• সফল: ${englishToBanglaNum(successCount.toString())} জন\n• ব্যর্থ: ${englishToBanglaNum(failedCount.toString())} জন`);
+}
+window.sendBulkDueSms = sendBulkDueSms;

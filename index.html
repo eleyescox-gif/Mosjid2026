@@ -604,6 +604,131 @@
                     </div>
                 </div>
 
+                <!-- ADMIN ONLY: Complete Database JSON Backup & Restore Section -->
+                <div id="adminJsonBackupSection" class="chart-card" style="margin-bottom: 20px; display: none; border: 1.5px solid #1565c0;">
+                    <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #0d47a1; font-weight: 700;">
+                            <i class="fa-solid fa-database" style="color: #1565c0; margin-right: 6px;"></i>সম্পূর্ণ ডাটাবেস ব্যাকআপ ও রিস্টোর (JSON System)
+                        </span>
+                        <span style="background: #e3f2fd; color: #1565c0; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; border: 1px solid #90caf9;">JSON Backup</span>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <p style="font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin-bottom: 14px;">
+                            প্রতিষ্ঠানের সকল সদস্য তালিকা, মাসিক চাঁদা রেকর্ড, আয়-ব্যয় লেনদেন, পরিচালনা কমিটি ও অ্যাপ সেটিংসের সম্পূর্ণ ডাটাবেস সুরক্ষিত রাখতে নিয়মিত <strong>JSON ব্যাকআপ ফাইল</strong> ডাউনলোড করুন। যেকোনো সময় এই ফাইল আপলোড করে পূর্বের অবস্থায় ফিরে যাওয়া যাবে।
+                        </p>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                            <!-- Backup Download Button -->
+                            <div style="background: #f4faf6; border: 1.5px solid #a5d6a7; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between;">
+                                <div>
+                                    <div style="font-size: 12.5px; font-weight: 700; color: #1b5e20; margin-bottom: 4px;">
+                                        <i class="fa-solid fa-cloud-arrow-down" style="margin-right: 4px;"></i> ব্যাকআপ ডাউনলোড
+                                    </div>
+                                    <p style="font-size: 10.5px; color: #555; margin-bottom: 10px;">
+                                        বর্তমান ডাটাবেসের একটি সম্পূর্ণ কপি .json ফাইল হিসেবে ডিভাইসে সেভ করুন।
+                                    </p>
+                                </div>
+                                <button type="button" class="btn btn-primary" onclick="exportDatabaseToJSON()" style="width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #2e7d32, #1b5e20); border: none; font-weight: 700; font-size: 12px;">
+                                    <i class="fa-solid fa-download"></i> ব্যাকআপ ডাউনলোড (.json)
+                                </button>
+                            </div>
+
+                            <!-- Restore Button -->
+                            <div style="background: #fffdf5; border: 1.5px solid #ffe082; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between;">
+                                <div>
+                                    <div style="font-size: 12.5px; font-weight: 700; color: #e65100; margin-bottom: 4px;">
+                                        <i class="fa-solid fa-cloud-arrow-up" style="margin-right: 4px;"></i> ব্যাকআপ রিস্টোর
+                                    </div>
+                                    <p style="font-size: 10.5px; color: #555; margin-bottom: 10px;">
+                                        পূর্বে সংরক্ষিত .json ব্যাকআপ ফাইল সিলেক্ট করে ডাটাবেস ফিরিয়ে আনুন।
+                                    </p>
+                                </div>
+                                <input type="file" id="jsonBackupFileInput" accept=".json, application/json" style="display:none;" onchange="restoreDatabaseFromJSON(event)">
+                                <button type="button" class="btn btn-secondary" onclick="document.getElementById('jsonBackupFileInput').click()" style="width: 100%; height: 40px; display: flex; align-items: center; justify-content: center; gap: 8px; background: #fff3cd; color: #856404; border: 1.5px solid #ffeeba; font-weight: 700; font-size: 12px;">
+                                    <i class="fa-solid fa-upload"></i> ব্যাকআপ রিস্টোর করুন
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style="background: #e8f4fd; border: 1px solid #bbdefb; border-radius: 8px; padding: 8px 12px; font-size: 11px; color: #0d47a1; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-shield-halved" style="font-size: 14px;"></i>
+                            <span><strong>নিরাপত্তা ব্যাকআপ:</strong> রিস্টোর করার পূর্বে বর্তমান ডাটা স্বয়ংক্রিয়ভাবে 'ডাটাবেস রিসাইকেল বিন'-এ ৩০ দিনের জন্য ব্যাকআপ থাকবে।</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ADMIN ONLY: Bulk SMS Dhaka Gateway Configuration & Dues Dispatcher -->
+                <div id="adminSmsGatewaySection" class="chart-card" style="margin-bottom: 20px; display: none; border: 1.5px solid #0288d1;">
+                    <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #01579b; font-weight: 700;">
+                            <i class="fa-solid fa-comment-sms" style="color: #0288d1; margin-right: 6px;"></i>এসএমএস গেটওয়ে কনফিগারেশন (Bulk SMS Dhaka)
+                        </span>
+                        <span id="smsGatewayStatusBadge" style="background: #e1f5fe; color: #0277bd; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; border: 1px solid #81d4fa;">
+                            <i class="fa-solid fa-signal"></i> সেটআপ
+                        </span>
+                    </div>
+
+                    <div style="background: white; padding: 15px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <p style="font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin-bottom: 14px;">
+                            <strong>bulksmsdhaka.net</strong> গেটওয়ের মাধ্যমে মসজিদ সদস্যদের বকেয়া চাঁদার নোটিশ এসএমএস পাঠানো যাবে। আপনার একাউন্টের API Key ও Caller ID নিচে প্রবেশ করিয়ে সংরক্ষণ করুন।
+                        </p>
+
+                        <form id="smsGatewayConfigForm" onsubmit="handleSaveSmsGatewaySettings(event)">
+                            <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                                <div class="form-group">
+                                    <label style="font-size: 11px; font-weight: 600;">API Key *</label>
+                                    <div style="position: relative;">
+                                        <input type="password" id="smsApiKey" class="form-control" placeholder="আপনার API Key দিন" required style="padding: 6px 30px 6px 10px; font-size: 12px;">
+                                        <i class="fa-solid fa-eye" id="toggleApiKeyVisibility" onclick="toggleSmsApiKeyVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #888; font-size: 12px;"></i>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label style="font-size: 11px; font-weight: 600;">Caller ID / Sender ID *</label>
+                                    <input type="text" id="smsCallerId" class="form-control" placeholder="1234 বা ব্রান্ড নাম" required style="padding: 6px 10px; font-size: 12px;" value="1234">
+                                </div>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <label style="font-size: 11px; font-weight: 600;">বকেয়া নোটিশ টেমপ্লেট *</label>
+                                    <span id="smsTemplateCharCount" style="font-size: 10px; color: #666; font-weight: 600;">০ অক্ষর (১ SMS)</span>
+                                </div>
+                                <textarea id="smsDueTemplate" class="form-control" rows="3" required style="padding: 8px; font-size: 12px; line-height: 1.5;" oninput="updateSmsCharCounter(this.value)">সম্মানিত {name}, {mosque_name}-এ আপনার বকেয়া চাঁদা ৳{due_amount}। অনুগ্রহ করে দ্রুত পরিশোধ করুন। ধন্যবাদ।</textarea>
+                                <div style="margin-top: 5px; font-size: 10.5px; color: #555; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+                                    <span style="font-weight: 600; color: #333;">ট্যাগসমূহ:</span>
+                                    <code style="background: #eef2f5; padding: 1px 5px; border-radius: 4px; color: #0d47a1; cursor: pointer;" onclick="insertSmsTag('{name}')">{name}</code>
+                                    <code style="background: #eef2f5; padding: 1px 5px; border-radius: 4px; color: #0d47a1; cursor: pointer;" onclick="insertSmsTag('{member_no}')">{member_no}</code>
+                                    <code style="background: #eef2f5; padding: 1px 5px; border-radius: 4px; color: #0d47a1; cursor: pointer;" onclick="insertSmsTag('{due_amount}')">{due_amount}</code>
+                                    <code style="background: #eef2f5; padding: 1px 5px; border-radius: 4px; color: #0d47a1; cursor: pointer;" onclick="insertSmsTag('{mosque_name}')">{mosque_name}</code>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary" style="width: 100%; height: 38px; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #0288d1, #01579b); border: none; font-weight: 700; font-size: 12px; margin-bottom: 12px;">
+                                <i class="fa-solid fa-floppy-disk"></i> গেটওয়ে সেটিংস সংরক্ষণ করুন
+                            </button>
+                        </form>
+
+                        <!-- Quick Test SMS & Bulk Due Dispatcher -->
+                        <div style="border-top: 1px dashed var(--border-color); padding-top: 12px; margin-top: 8px;">
+                            <div style="font-size: 12px; font-weight: 700; color: #333; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                                <span><i class="fa-solid fa-paper-plane" style="color: #0288d1; margin-right: 5px;"></i>টেস্ট এসএমএস পাঠান</span>
+                                <span style="font-size: 10px; color: var(--text-muted); font-weight: normal;">(গেটওয়ে সংযোগ যাচাই)</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px;">
+                                <input type="text" id="smsTestNumber" class="form-control" placeholder="01XXXXXXXXX" style="font-size: 12px; padding: 6px 10px;">
+                                <button type="button" class="btn btn-secondary" onclick="sendTestSms()" style="height: 36px; padding: 0 14px; font-size: 11.5px; font-weight: 700; background: #e1f5fe; color: #0277bd; border: 1px solid #b3e5fc;">
+                                    <i class="fa-solid fa-vial"></i> টেস্ট পাঠান
+                                </button>
+                            </div>
+
+                            <!-- Bulk Arrears SMS Trigger -->
+                            <button type="button" class="btn btn-primary" onclick="openBulkDueSmsModal()" style="width: 100%; height: 42px; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #2e7d32, #1b5e20); border: none; font-weight: 700; font-size: 12.5px; box-shadow: 0 2px 6px rgba(46,125,50,0.25);">
+                                <i class="fa-solid fa-bullhorn"></i> সকল বকেয়া সদস্যদের এসএমএস নোটিশ পাঠান
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ADMIN ONLY: Excel Export Section -->
                 <div id="adminExportSection" class="chart-card" style="margin-bottom: 20px; display: none;">
                     <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
@@ -989,6 +1114,11 @@
                 <!-- Dynamically populated buttons -->
             </div>
 
+            <!-- Send Member Due SMS Button -->
+            <button id="mdSendSmsBtn" class="btn btn-primary" style="display: none; margin-bottom: 10px; background: linear-gradient(135deg, #0288d1, #01579b); border: none; font-weight: 700; font-size: 12px; height: 40px; align-items: center; justify-content: center; gap: 8px;">
+                <i class="fa-solid fa-comment-sms"></i> বকেয়া এসএমএস নোটিশ পাঠান
+            </button>
+
             <!-- Print Individual Yearly Report Button -->
             <button id="mdPrintYearlyBtn" class="btn btn-primary" style="margin-bottom: 10px; background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-color) 100%);" onclick="generateYearlyPrintReport()">
                 <i class="fa-solid fa-file-pdf"></i> বাৎসরিক বিবরণী প্রিন্ট (A4)
@@ -1062,6 +1192,117 @@
             </div>
 
             <button class="btn btn-secondary" onclick="closeModal('member-statement-modal')" style="width: 100%;">বন্ধ করুন</button>
+        </div>
+    </div>
+
+    <!-- ================== MODALS: BULK & SINGLE MEMBER DUE SMS ================== -->
+
+    <!-- Modal: Single Member Due SMS -->
+    <div id="send-due-sms-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)">
+        <div class="modal-content" style="max-width: 420px; border-radius: 14px; padding: 20px;">
+            <div class="modal-header" style="margin-bottom: 14px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                <h4 style="font-size: 15px; color: #01579b; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-comment-sms"></i> বকেয়া এসএমএস নোটিশ পাঠান
+                </h4>
+                <button class="icon-btn" onclick="closeModal('send-due-sms-modal')" style="background: none; color: var(--text-main); font-size: 18px;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <input type="hidden" id="singleSmsMemberId">
+            <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-size: 11px; color: var(--text-muted);">সদস্যের নাম:</span>
+                    <strong id="singleSmsMemberName" style="font-size: 12.5px; color: var(--text-main);">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-size: 11px; color: var(--text-muted);">মোবাইল নম্বর:</span>
+                    <strong id="singleSmsMemberPhone" style="font-size: 12.5px; color: #0277bd;">-</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="font-size: 11px; color: var(--text-muted);">মোট বকেয়া:</span>
+                    <strong id="singleSmsMemberDue" style="font-size: 13px; color: var(--danger-color);">৳ ০.০০</strong>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label style="font-size: 11px; font-weight: 600;">এসএমএস বার্তা (বার্তা পরিবর্তনযোগ্য) *</label>
+                    <span id="singleSmsCharCount" style="font-size: 10px; color: #666; font-weight: 600;">০ অক্ষর (১ SMS)</span>
+                </div>
+                <textarea id="singleSmsMessage" class="form-control" rows="4" style="font-size: 12px; line-height: 1.5; padding: 8px;" oninput="updateSingleSmsCharCounter(this.value)"></textarea>
+            </div>
+
+            <div id="singleSmsStatusContainer" style="display: none; padding: 8px 12px; border-radius: 8px; font-size: 11.5px; margin-bottom: 12px;"></div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('send-due-sms-modal')" style="height: 38px; font-size: 12px;">বাতিল</button>
+                <button type="button" id="singleSmsSendBtn" class="btn btn-primary" onclick="sendSingleMemberDueSms()" style="height: 38px; font-size: 12px; background: linear-gradient(135deg, #0288d1, #01579b); border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <i class="fa-solid fa-paper-plane"></i> এসএমএস পাঠান
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Bulk Due SMS to All Arrears Members -->
+    <div id="bulk-due-sms-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)">
+        <div class="modal-content" style="max-width: 520px; max-height: 90vh; border-radius: 14px; padding: 18px; display: flex; flex-direction: column;">
+            <div class="modal-header" style="margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                <div>
+                    <h4 style="font-size: 15px; color: #1b5e20; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-bullhorn"></i> বকেয়া নোটিশ বাল্ক এসএমএস
+                    </h4>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                        সকল বকেয়া সদস্যদের কাছে এক ক্লিকে নোটিশ বার্তা পাঠান
+                    </div>
+                </div>
+                <button class="icon-btn" onclick="closeModal('bulk-due-sms-modal')" style="background: none; color: var(--text-main); font-size: 18px;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px;">
+                <div style="font-size: 11.5px; font-weight: 700; color: #2e7d32;">
+                    মোট বকেয়া সদস্য: <span id="bulkDueTotalMembersCount">০</span> জন
+                </div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #1565c0;">
+                    নির্বাচিত: <span id="bulkDueSelectedMembersCount">০</span> জন
+                </div>
+            </div>
+
+            <!-- Filter / Select All Bar -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; margin-bottom: 8px;">
+                <label style="font-size: 11.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="bulkDueSelectAll" onchange="toggleBulkDueSelectAll(this.checked)" checked style="cursor: pointer; width: 15px; height: 15px;">
+                    সবাইকে নির্বাচন করুন
+                </label>
+                <span style="font-size: 10.5px; color: var(--text-muted);">নম্বরবিহীন সদস্য তালিকায় আসবে না</span>
+            </div>
+
+            <!-- Members Table / List Scroll Area -->
+            <div id="bulkDueMembersList" style="flex: 1; overflow-y: auto; max-height: 220px; border: 1px solid var(--border-color); border-radius: 8px; padding: 4px; margin-bottom: 12px; background: #fff;">
+                <!-- Rendered dynamically -->
+            </div>
+
+            <!-- Template Preview Box -->
+            <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px;">
+                <div style="font-size: 10.5px; font-weight: 700; color: #555; margin-bottom: 4px;">বার্তা প্রিভিউ (প্রতিটি সদস্যের জন্য নাম ও বকেয়া স্বয়ংক্রিয় বসবে):</div>
+                <div id="bulkDueMessagePreview" style="font-size: 11px; color: #333; line-height: 1.4; font-style: italic;"></div>
+            </div>
+
+            <!-- Progress Container (Hidden by default) -->
+            <div id="bulkDueProgressContainer" style="display: none; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; margin-bottom: 4px;">
+                    <span id="bulkDueProgressText">প্রক্রিয়া চলছে...</span>
+                    <span id="bulkDueProgressPercent">০%</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden;">
+                    <div id="bulkDueProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #2e7d32, #43a047); transition: width 0.2s;"></div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('bulk-due-sms-modal')" style="height: 40px; font-size: 12px;">বন্ধ করুন</button>
+                <button type="button" id="bulkDueSendBtn" class="btn btn-primary" onclick="sendBulkDueSms()" style="height: 40px; font-size: 12.5px; background: linear-gradient(135deg, #2e7d32, #1b5e20); border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <i class="fa-solid fa-paper-plane"></i> এসএমএস পাঠানো শুরু করুন
+                </button>
+            </div>
         </div>
     </div>
 
