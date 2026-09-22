@@ -5839,7 +5839,7 @@ function insertSmsTag(tag) {
 }
 window.insertSmsTag = insertSmsTag;
 
-// Core SMS Dispatch Engine to bulksmsdhaka.net
+// Core SMS Dispatch Engine (Serverless API with direct fallback)
 async function sendBulkSmsDhakaApi({ apikey, callerID, number, message }) {
     const cleanNumber = cleanBDPhoneNumber(number);
     if (!cleanNumber || cleanNumber.length !== 11) {
@@ -5852,9 +5852,37 @@ async function sendBulkSmsDhakaApi({ apikey, callerID, number, message }) {
         throw new Error("এসএমএস বার্তা খালি থাকতে পারে না।");
     }
 
-    const encodedMsg = encodeURIComponent(message.trim());
-    const encodedKey = encodeURIComponent(apikey.trim());
-    const encodedCaller = encodeURIComponent((callerID || '1234').trim());
+    const payload = {
+        apikey: apikey.trim(),
+        callerID: (callerID || '1234').trim(),
+        number: cleanNumber,
+        message: message.trim()
+    };
+
+    // 1. Try Serverless Proxy API (/api/send-sms) first to avoid CORS & AdBlock issues
+    try {
+        const proxyRes = await fetch('/api/send-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (proxyRes.status !== 404) {
+            const data = await proxyRes.json();
+            if (proxyRes.ok && data.success) {
+                return { success: true, message: data.message || 'এসএমএস সফলভাবে পৌঁছেছে', raw: data };
+            } else {
+                return { success: false, message: data.message || `ব্যর্থ হয়েছে (কোড: ${proxyRes.status})`, raw: data };
+            }
+        }
+    } catch (proxyErr) {
+        console.warn("Proxy API /api/send-sms unavailable, falling back to direct call:", proxyErr);
+    }
+
+    // 2. Fallback: Direct call to bulksmsdhaka.net
+    const encodedMsg = encodeURIComponent(payload.message);
+    const encodedKey = encodeURIComponent(payload.apikey);
+    const encodedCaller = encodeURIComponent(payload.callerID);
     const url = `https://bulksmsdhaka.net/api/sendtext?apikey=${encodedKey}&callerID=${encodedCaller}&number=${cleanNumber}&message=${encodedMsg}`;
 
     try {
@@ -5871,30 +5899,72 @@ async function sendBulkSmsDhakaApi({ apikey, callerID, number, message }) {
             json = { raw: text };
         }
 
-        // BulkSMSDhaka returns:
-        // Success: { "Status": "1000", "Success": "true", "Message": "Your sms request successful!!" }
-        // Failure: { "error": "Unauthenticated or Invalid API Key." } or Status !== "1000"
-        if (json.error) {
+        // Extract raw message from any casing or structure
+        const rawMsg = (json && (json.message || json.Message || json.error || json.msg)) || (typeof text === 'string' && text.length < 250 ? text : '');
+
+        // Check for specific IP Whitelist error from BulkSMSDhaka
+        if (rawMsg && (rawMsg.includes('not whitelisted') || rawMsg.includes('Access Denied') || rawMsg.includes('IP'))) {
+            return {
+                success: false,
+                message: `BulkSMSDhaka থেকে অ্যাক্সেস বাতিল (IP Whitelist সমস্যা):\n\n"${rawMsg}"\n\n👉 সমাধান:\n১. bulksmsdhaka.net-এ লগইন করুন।\n২. Developer / API Settings-এ গিয়ে আপনার IP Whitelist-এ আইপি যুক্ত করুন অথবা IP Whitelist নিষ্ক্রিয় (Disable) করুন।\n৩. অথবা BulkSMSDhaka হেল্পলাইনে (01682314951) কল/মেসেজ দিয়ে IP Restriction বন্ধ করতে বলুন।`,
+                raw: json
+            };
+        }
+
+        if (json && json.error) {
             return { success: false, message: json.error, raw: json };
         }
-        if (json.Success === "true" || json.Status === "1000" || json.status === "success") {
-            return { success: true, message: json.Message || 'এসএমএস সফলভাবে পৌঁছেছে', raw: json };
+        if (json && (json.Success === "true" || json.Status === "1000" || json.status === "success")) {
+            return { success: true, message: rawMsg || 'এসএমএস সফলভাবে পৌঁছেছে', raw: json };
         }
-        if (json.Success === "false" || json.Message) {
-            return { success: false, message: json.Message || 'ব্যর্থ হয়েছে', raw: json };
+        if (json && (json.Success === "false" || json.status === 'error')) {
+            return { success: false, message: rawMsg || 'এসএমএস রিকোয়েস্ট ব্যর্থ হয়েছে', raw: json };
         }
 
         // If status is ok and not explicit error
         if (response.ok) {
-            return { success: true, message: 'এসএমএস রিকোয়েস্ট গৃহীত হয়েছে', raw: json };
+            return { success: true, message: rawMsg || 'এসএমএস রিকোয়েস্ট গৃহীত হয়েছে', raw: json };
         }
-        return { success: false, message: `সার্ভার রেসপন্স কোড: ${response.status}`, raw: json };
+        return { success: false, message: rawMsg || `সার্ভার রেসপন্স কোড: ${response.status}`, raw: json };
     } catch (netErr) {
         console.error("SMS Gateway Fetch Error:", netErr);
         throw new Error("এসএমএস সার্ভারের সাথে সংযোগ করা যায়নি (" + netErr.message + ")");
     }
 }
 window.sendBulkSmsDhakaApi = sendBulkSmsDhakaApi;
+
+// Client Public IP Detection for Easy Whitelisting
+async function detectAndShowUserIp() {
+    const ipEl = document.getElementById('detectedUserIpText');
+    if (!ipEl) return;
+    try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        if (data && data.ip) {
+            ipEl.textContent = data.ip;
+            ipEl.dataset.ip = data.ip;
+        } else {
+            ipEl.textContent = 'পাওয়া যায়নি';
+        }
+    } catch (e) {
+        if (ipEl) ipEl.textContent = 'পাওয়া যায়নি';
+    }
+}
+
+function copyDetectedIp() {
+    const ipEl = document.getElementById('detectedUserIpText');
+    const ip = ipEl?.dataset?.ip || ipEl?.textContent;
+    if (ip && ip !== 'লোড হচ্ছে...' && ip !== 'পাওয়া যায়নি') {
+        navigator.clipboard.writeText(ip).then(() => {
+            alert(`আপনার আইপি (${ip}) ক্লিপবোর্ডে কপি করা হয়েছে!\nএটি bulksmsdhaka.net-এর API IP Whitelist-এ যুক্ত করুন।`);
+        }).catch(() => {
+            alert(`আপনার আইপি: ${ip}`);
+        });
+    } else {
+        alert("আইপি লোড হয়নি, অনুগ্রহ করে পেজ রিফ্রেশ করুন।");
+    }
+}
+window.copyDetectedIp = copyDetectedIp;
 
 // Populate SMS Gateway Inputs in Settings
 function populateSmsGatewayInputs() {
@@ -5924,6 +5994,9 @@ function populateSmsGatewayInputs() {
             badge.style.borderColor = '#ffe082';
         }
     }
+
+    // Auto-detect current internet IP
+    detectAndShowUserIp();
 }
 window.populateSmsGatewayInputs = populateSmsGatewayInputs;
 

@@ -669,9 +669,22 @@
                     </div>
 
                     <div style="background: white; padding: 15px; border-radius: 12px; border: 1px solid var(--border-color);">
-                        <p style="font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin-bottom: 14px;">
+                        <p style="font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin-bottom: 10px;">
                             <strong>bulksmsdhaka.net</strong> গেটওয়ের মাধ্যমে মসজিদ সদস্যদের বকেয়া চাঁদার নোটিশ এসএমএস পাঠানো যাবে। আপনার একাউন্টের API Key ও Caller ID নিচে প্রবেশ করিয়ে সংরক্ষণ করুন।
                         </p>
+
+                        <!-- IP Whitelist Alert & Quick Helper -->
+                        <div style="background: #fff8e1; border-left: 4px solid #ff9800; padding: 10px 12px; border-radius: 6px; margin-bottom: 14px; font-size: 11.5px; color: #b78103; line-height: 1.5; border: 1px solid #ffe082;">
+                            <strong style="color: #e65100;"><i class="fa-solid fa-triangle-exclamation"></i> গুরুত্বপূর্ণ (BulkSMSDhaka IP Whitelist):</strong><br>
+                            এসএমএস পাঠানোর জন্য <a href="https://bulksmsdhaka.net" target="_blank" style="color: #0277bd; font-weight: bold; text-decoration: underline;">bulksmsdhaka.net</a> ড্যাশবোর্ডে গিয়ে <strong>API Settings / IP Whitelist</strong> অপশনে আপনার আইপি যুক্ত করুন অথবা <strong>IP Whitelist নিষ্ক্রিয় (Disable)</strong> করুন।<br>
+                            <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <span style="color: #333; font-weight: 600;">আপনার বর্তমান আইপি:</span>
+                                <code id="detectedUserIpText" style="background: #fff; padding: 2px 8px; border-radius: 4px; border: 1px solid #ffcc80; font-weight: bold; color: #d84315;">লোড হচ্ছে...</code>
+                                <button type="button" class="btn btn-secondary" onclick="copyDetectedIp()" style="height: 24px; padding: 0 8px; font-size: 10.5px; font-weight: 700; background: #ff9800; color: #fff; border: none; border-radius: 4px; cursor: pointer;">
+                                    <i class="fa-solid fa-copy"></i> কপি আইপি
+                                </button>
+                            </div>
+                        </div>
 
                         <form id="smsGatewayConfigForm" onsubmit="handleSaveSmsGatewaySettings(event)">
                             <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
