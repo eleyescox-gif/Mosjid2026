@@ -716,6 +716,22 @@
                                 </div>
                             </div>
 
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <label style="font-size: 11px; font-weight: 600;">চাঁদা আদায় কনফার্মেশন এসএমএস টেমপ্লেট *</label>
+                                    <span id="smsPaymentTemplateCharCount" style="font-size: 10px; color: #666; font-weight: 600;">০ অক্ষর (১ SMS)</span>
+                                </div>
+                                <textarea id="smsPaymentTemplate" class="form-control" rows="3" required style="padding: 8px; font-size: 12px; line-height: 1.5;" oninput="updatePaymentSmsCharCounter(this.value)">সম্মানিত {name}, {mosque_name}-এ আপনার চাঁদা ৳{amount} (রশিদ নং: {receipt_no}) সফলভাবে জমা হয়েছে। ধন্যবাদ।</textarea>
+                                <div style="margin-top: 5px; font-size: 10.5px; color: #555; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+                                    <span style="font-weight: 600; color: #333;">ট্যাগসমূহ:</span>
+                                    <code style="background: #eef2f5; padding: 1px 5px; border-radius: 4px; color: #0d47a1; cursor: pointer;" onclick="insertPaymentSmsTag('{name}')">{name}</code>
+                                    <code style="background: #eef2f5; padding: 1px 5px; border-radius: 4px; color: #0d47a1; cursor: pointer;" onclick="insertPaymentSmsTag('{amount}')">{amount}</code>
+                                    <code style="background: #eef2f5; padding: 1px 5px; border-radius: 4px; color: #0d47a1; cursor: pointer;" onclick="insertPaymentSmsTag('{receipt_no}')">{receipt_no}</code>
+                                    <code style="background: #eef2f5; padding: 1px 5px; border-radius: 4px; color: #0d47a1; cursor: pointer;" onclick="insertPaymentSmsTag('{member_no}')">{member_no}</code>
+                                    <code style="background: #eef2f5; padding: 1px 5px; border-radius: 4px; color: #0d47a1; cursor: pointer;" onclick="insertPaymentSmsTag('{mosque_name}')">{mosque_name}</code>
+                                </div>
+                            </div>
+
                             <button type="submit" class="btn btn-primary" style="width: 100%; height: 38px; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #0288d1, #01579b); border: none; font-weight: 700; font-size: 12px; margin-bottom: 12px;">
                                 <i class="fa-solid fa-floppy-disk"></i> গেটওয়ে সেটিংস সংরক্ষণ করুন
                             </button>

@@ -41,7 +41,8 @@ const DEFAULT_SETTINGS = {
     sms_gateway: {
         api_key: '',
         caller_id: '1234',
-        due_template: 'সম্মানিত {name}, {mosque_name}-এ আপনার বকেয়া চাঁদা ৳{due_amount}। অনুগ্রহ করে দ্রুত পরিশোধ করুন। ধন্যবাদ।'
+        due_template: 'সম্মানিত {name}, {mosque_name}-এ আপনার বকেয়া চাঁদা ৳{due_amount}। অনুগ্রহ করে দ্রুত পরিশোধ করুন। ধন্যবাদ।',
+        payment_template: 'সম্মানিত {name}, {mosque_name}-এ আপনার চাঁদা ৳{amount} (রশিদ নং: {receipt_no}) সফলভাবে জমা হয়েছে। ধন্যবাদ।'
     }
 };
 
@@ -317,7 +318,7 @@ function formatShortDateBN(dateStr) {
 }
 
 // Automatically process advance deductions for all members (including future months)
-function processAdvanceDeductions() {
+function processAdvanceDeductions(preferredReceiptNo, paymentDate) {
     let stateChanged = false;
     const now = new Date();
 
@@ -360,8 +361,8 @@ function processAdvanceDeductions() {
                 sub.amount_paid = parseFloat(sub.amount_paid) + deductAmount;
                 sub.due_amount = member.monthly_fee - sub.amount_paid;
                 sub.status = sub.due_amount <= 0 ? 'Paid' : 'Partial';
-                sub.last_payment_date = now.toISOString().split('T')[0];
-                sub.receipt_no = sub.receipt_no || 'ADVANCE'; // Tagged as advance deduction
+                sub.last_payment_date = paymentDate || (now.toISOString().split('T')[0]);
+                sub.receipt_no = (preferredReceiptNo && member.id === state.activeMemberId) ? preferredReceiptNo : (sub.receipt_no || 'ADVANCE');
 
                 advance -= deductAmount;
                 stateChanged = true;
@@ -392,6 +393,72 @@ function processAdvanceDeductions() {
         saveState();
     }
 }
+
+// Normalize any negative opening arrears (advance audit credit) into actual subscription payments
+function normalizeNegativeOpeningArrears() {
+    let changed = false;
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+
+    (state.members || []).forEach(member => {
+        if (!member || member.member_type === 'Free' || member.is_deleted) return;
+        const op = parseFloat(member.opening_arrears || 0);
+        if (op < 0) {
+            let credit = Math.abs(op);
+            const fee = parseFloat(member.monthly_fee || 0);
+            if (fee <= 0) return;
+
+            const joinParts = (member.join_date || '2025-01-01').split('-');
+            const joinYear = parseInt(joinParts[0]) || 2025;
+            const joinMonth = parseInt(joinParts[1]) || 1;
+
+            for (let y = joinYear; y <= curYear && credit > 0; y++) {
+                const sM = y === joinYear ? joinMonth : 1;
+                const eM = y === curYear ? curMonth : 12;
+                for (let m = sM; m <= eM && credit > 0; m++) {
+                    let sub = (state.subscriptions || []).find(s => s.member_id === member.id && s.year === y && s.month === m);
+                    if (!sub) {
+                        sub = {
+                            id: `sub-${member.id}-${y}-${m}`,
+                            member_id: member.id,
+                            year: y,
+                            month: m,
+                            amount_paid: 0,
+                            due_amount: fee,
+                            status: 'Unpaid',
+                            last_payment_date: ''
+                        };
+                        state.subscriptions.push(sub);
+                        changed = true;
+                    }
+                    const needed = fee - parseFloat(sub.amount_paid || 0);
+                    if (needed > 0) {
+                        const payThis = Math.min(credit, needed);
+                        sub.amount_paid = parseFloat(sub.amount_paid || 0) + payThis;
+                        sub.due_amount = fee - sub.amount_paid;
+                        sub.status = sub.due_amount <= 0 ? 'Paid' : 'Partial';
+                        if (!sub.receipt_no) sub.receipt_no = 'অডিট সমন্বয়';
+                        if (!sub.last_payment_date) sub.last_payment_date = (member.join_date || '2026-07-01');
+                        credit -= payThis;
+                        changed = true;
+                    }
+                }
+            }
+            if (credit > 0) {
+                member.advance_balance = parseFloat(member.advance_balance || 0) + credit;
+            }
+            member.opening_arrears = 0;
+            changed = true;
+        }
+    });
+
+    if (changed) {
+        processAdvanceDeductions();
+        saveState();
+    }
+}
+
 
 // LocalStorage Handlers
 function loadState() {
@@ -497,8 +564,9 @@ function loadState() {
     
     const cleanedDupes = deduplicateTransactions();
     const fixedImamDate = fixImamSalaryTransactionDate();
-    if (cleanedDupes || fixedImamDate) { saveState(); }
-    
+    // Normalize any negative opening arrears into subscription records
+    normalizeNegativeOpeningArrears();
+
     // Process any pending advance payments
     processAdvanceDeductions();
 
@@ -1547,7 +1615,7 @@ function renderMembersList() {
 
         const firstChar = (m.name || 'স').trim().charAt(0);
         const dueAmount = calculateMemberTotalDue(m.id);
-        const advanceAmount = parseFloat(m.advance_balance || 0);
+        const advanceAmount = getMemberAdvanceBalance(m.id);
         const hasDue = dueAmount > 0;
 
         let badgeClass = 'general';
@@ -1643,6 +1711,26 @@ function calculateMemberTotalDue(memberId) {
     const due = (totalExpected + openingArrears) - totalPaid;
     return due > 0 ? due : 0;
 }
+
+// Calculate Total Advance Balance for a Member (both in advance_balance and future months paid in subscriptions)
+function getMemberAdvanceBalance(memberId) {
+    const member = state.members.find(m => m.id === memberId);
+    if (!member || member.member_type === 'Free' || member.status === 'Pending' || member.is_deleted) return 0;
+
+    let adv = parseFloat(member.advance_balance || 0);
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+
+    (state.subscriptions || []).forEach(s => {
+        if (s.member_id === memberId && (s.year > curYear || (s.year === curYear && s.month > curMonth))) {
+            adv += parseFloat(s.amount_paid || 0);
+        }
+    });
+
+    return adv > 0 ? adv : 0;
+}
+window.getMemberAdvanceBalance = getMemberAdvanceBalance;
 
 // Modal management
 function openModal(modalId) {
@@ -1823,7 +1911,7 @@ function showMemberStatement(memberId) {
     }
 
     // Set advance balance
-    var advanceVal = parseFloat(member.advance_balance || 0);
+    var advanceVal = getMemberAdvanceBalance(member.id);
     document.getElementById('stmtAdvanceBalance').innerHTML = advanceVal > 0 
         ? '৳ ' + englishToBanglaNum(advanceVal.toFixed(0)) 
         : '৳ ০';
@@ -2001,7 +2089,7 @@ function openMemberDetails(memberId) {
     document.getElementById('mdModalType').innerHTML = `<span class="member-type-badge ${typeClass}">${typeLabel}</span>`;
     
     const totalDue = calculateMemberTotalDue(memberId);
-    const advanceVal = parseFloat(member.advance_balance || 0);
+    const advanceVal = getMemberAdvanceBalance(memberId);
 
     if (advanceVal > 0) {
         document.getElementById('mdModalTotalDue').innerHTML = `<div style="text-align: right;"><span class="text-muted" style="text-decoration: line-through; font-size: 13px; display: block; margin-bottom: 2px; color: var(--text-muted) !important;">বকেয়া: ৳ ০.০০</span><span style="color: var(--success-color); font-size: 18px; font-weight: bold; display: block;">অগ্রিম জমা: ৳ ${englishToBanglaNum(advanceVal.toFixed(2))}</span></div>`;
@@ -2222,7 +2310,6 @@ function handleEasyPaymentSubmit(e) {
         return;
     }
 
-    let remainingPaid = totalPaid;
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonthLimit = now.getMonth() + 1;
@@ -2231,6 +2318,46 @@ function handleEasyPaymentSubmit(e) {
     const joinYear = parseInt(joinParts[0]) || 2025;
     const joinMonth = parseInt(joinParts[1]) || 1;
 
+    // Step 1: If member has negative opening arrears (advance credit from audit), first satisfy past months from join date
+    if (parseFloat(member.opening_arrears || 0) < 0) {
+        let credit = Math.abs(parseFloat(member.opening_arrears));
+        for (let year = joinYear; year <= currentYear && credit > 0; year++) {
+            const startM = year === joinYear ? joinMonth : 1;
+            const endM = year === currentYear ? currentMonthLimit : 12;
+
+            for (let m = startM; m <= endM && credit > 0; m++) {
+                let sub = state.subscriptions.find(s => s.member_id === memberId && s.year === year && s.month === m);
+                if (!sub) {
+                    sub = {
+                        id: `sub-${memberId}-${year}-${m}`,
+                        member_id: memberId,
+                        year: year,
+                        month: m,
+                        amount_paid: 0,
+                        due_amount: member.monthly_fee,
+                        status: 'Unpaid',
+                        last_payment_date: ''
+                    };
+                    state.subscriptions.push(sub);
+                }
+
+                const currentDue = member.monthly_fee - parseFloat(sub.amount_paid || 0);
+                if (currentDue > 0) {
+                    const payFromCredit = Math.min(credit, currentDue);
+                    sub.amount_paid = parseFloat(sub.amount_paid || 0) + payFromCredit;
+                    sub.due_amount = member.monthly_fee - sub.amount_paid;
+                    sub.status = sub.due_amount <= 0 ? 'Paid' : 'Partial';
+                    if (!sub.receipt_no) sub.receipt_no = 'অডিট সমন্বয়';
+                    if (!sub.last_payment_date) sub.last_payment_date = (member.join_date || '2026-07-01');
+                    credit -= payFromCredit;
+                }
+            }
+        }
+        member.opening_arrears = -credit;
+    }
+
+    // Step 2: Chronologically allocate new cash payment to unpaid months up to current month limit
+    let remainingPaid = totalPaid;
     for (let year = joinYear; year <= currentYear && remainingPaid > 0; year++) {
         const startM = year === joinYear ? joinMonth : 1;
         const endM = year === currentYear ? currentMonthLimit : 12;
@@ -2251,11 +2378,11 @@ function handleEasyPaymentSubmit(e) {
                 state.subscriptions.push(sub);
             }
 
-            const currentDue = member.monthly_fee - parseFloat(sub.amount_paid);
+            const currentDue = member.monthly_fee - parseFloat(sub.amount_paid || 0);
             if (currentDue > 0) {
                 const payForThisMonth = Math.min(remainingPaid, currentDue);
                 
-                sub.amount_paid = parseFloat(sub.amount_paid) + payForThisMonth;
+                sub.amount_paid = parseFloat(sub.amount_paid || 0) + payForThisMonth;
                 sub.due_amount = member.monthly_fee - sub.amount_paid;
                 sub.status = sub.due_amount <= 0 ? 'Paid' : 'Partial';
                 sub.last_payment_date = date;
@@ -2266,14 +2393,15 @@ function handleEasyPaymentSubmit(e) {
         }
     }
 
+    // Step 3: Any extra money goes to advance balance and is immediately applied to future advance months with receiptNo
     let descriptionText = `${member.name} - চাঁদা আদায় (রশিদ নং: ${englishToBanglaNum(receiptNo)})`;
     if (remainingPaid > 0) {
         member.advance_balance = parseFloat(member.advance_balance || 0) + remainingPaid;
         descriptionText += ` [অগ্রিম জমা: ৳ ${englishToBanglaNum(remainingPaid.toFixed(2))}]`;
-        // Apply this new advance balance immediately to any future months
-        processAdvanceDeductions();
+        processAdvanceDeductions(receiptNo, date);
     }
 
+    // Step 4: Record Transaction Entry
     const txId = 'tx-sub-' + Date.now();
     state.transactions.unshift({
         id: txId,
@@ -2292,11 +2420,46 @@ function handleEasyPaymentSubmit(e) {
     saveState();
     closeModal('member-details-modal');
     refreshAppUI();
-    
+
+    // Step 5: Automatically Dispatch Confirmation SMS to Member's Mobile
+    let smsSent = false;
+    const cleanPhone = cleanBDPhoneNumber(member.phone);
+    const gw = state.settings.sms_gateway || DEFAULT_SETTINGS.sms_gateway || {};
+
+    if (gw.api_key && cleanPhone && cleanPhone.length === 11) {
+        const mosqueName = state.settings.mosque_name || state.settings.mosqueName || (typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS.mosque_name : 'পূর্ব মোহাজের পাড়া জামে মসজিদ');
+        const realIdx = state.members.findIndex(m => m.id === member.id) + 1;
+        const memberNumBN = englishToBanglaNum(String(realIdx).padStart(2, '0'));
+        let tpl = gw.payment_template || (DEFAULT_SETTINGS.sms_gateway && DEFAULT_SETTINGS.sms_gateway.payment_template) || 'সম্মানিত {name}, {mosque_name}-এ আপনার চাঁদা ৳{amount} (রশিদ নং: {receipt_no}) সফলভাবে জমা হয়েছে। ধন্যবাদ।';
+        const smsMsg = tpl
+            .replace(/{name}/g, member.name)
+            .replace(/{member_no}/g, memberNumBN)
+            .replace(/{amount}/g, englishToBanglaNum(totalPaid.toFixed(0)))
+            .replace(/{receipt_no}/g, englishToBanglaNum(receiptNo))
+            .replace(/{mosque_name}/g, mosqueName);
+
+        smsSent = true;
+        sendBulkSmsDhakaApi({
+            apikey: gw.api_key,
+            callerID: gw.caller_id || '1234',
+            number: cleanPhone,
+            message: smsMsg
+        }).then(res => {
+            if (res && res.success) {
+                console.log(`পেমেন্ট নিশ্চিতকরণ এসএমএস সফলভাবে পৌঁছেছে (${cleanPhone})`);
+            } else {
+                console.warn(`পেমেন্ট এসএমএস পাঠানো যায়নি:`, res);
+            }
+        }).catch(err => {
+            console.warn(`পেমেন্ট এসএমএস সার্ভার এরর:`, err);
+        });
+    }
+
+    const smsNotice = smsSent ? `\n(সদস্যের মোবাইলে পেমেন্ট নিশ্চিতকরণ এসএমএস পাঠানো হয়েছে)` : '';
     if (remainingPaid > 0) {
-        alert(`৳ ${englishToBanglaNum(totalPaid.toString())} চাঁদা আদায় সফল হয়েছে। এর মধ্যে ৳ ${englishToBanglaNum(remainingPaid.toFixed(2))} সদস্যের অ্যাকাউন্টে অগ্রিম হিসেবে জমা রাখা হয়েছে।`);
+        alert(`৳ ${englishToBanglaNum(totalPaid.toString())} চাঁদা আদায় সফল হয়েছে। এর মধ্যে ৳ ${englishToBanglaNum(remainingPaid.toFixed(2))} সদস্যের অ্যাকাউন্টে অগ্রিম হিসেবে জমা রাখা হয়েছে।${smsNotice}`);
     } else {
-        alert(`৳ ${englishToBanglaNum(totalPaid.toString())} চাঁদা আদায় সফলভাবে রশিদ নম্বর ${englishToBanglaNum(receiptNo)} সহ রেকর্ড করা হয়েছে।`);
+        alert(`৳ ${englishToBanglaNum(totalPaid.toString())} চাঁদা আদায় সফলভাবে রশিদ নম্বর ${englishToBanglaNum(receiptNo)} সহ রেকর্ড করা হয়েছে।${smsNotice}`);
     }
 }
 // Open Edit Member Form
@@ -4683,7 +4846,7 @@ function generateYearlyPrintReport(targetMemberId) {
         const printDate = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
 
         const totalDue = calculateMemberTotalDue(member.id);
-        const advanceBal = parseFloat(member.advance_balance || 0);
+        const advanceBal = getMemberAdvanceBalance(member.id);
         const openingArrears = parseFloat(member.opening_arrears || 0);
 
         // Get all transactions for this member
@@ -5839,6 +6002,27 @@ function insertSmsTag(tag) {
 }
 window.insertSmsTag = insertSmsTag;
 
+function updatePaymentSmsCharCounter(text) {
+    const el = document.getElementById('smsPaymentTemplateCharCount');
+    if (!el) return;
+    const info = calculateSmsParts(text);
+    el.innerText = `${englishToBanglaNum(info.length.toString())} অক্ষর (${englishToBanglaNum(info.parts.toString())} SMS)`;
+}
+window.updatePaymentSmsCharCounter = updatePaymentSmsCharCounter;
+
+function insertPaymentSmsTag(tag) {
+    const textarea = document.getElementById('smsPaymentTemplate');
+    if (!textarea) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const val = textarea.value;
+    textarea.value = val.substring(0, start) + tag + val.substring(end);
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+    updatePaymentSmsCharCounter(textarea.value);
+}
+window.insertPaymentSmsTag = insertPaymentSmsTag;
+
 // Core SMS Dispatch Engine (Serverless API with direct fallback)
 async function sendBulkSmsDhakaApi({ apikey, callerID, number, message }) {
     const cleanNumber = cleanBDPhoneNumber(number);
@@ -5980,6 +6164,11 @@ function populateSmsGatewayInputs() {
         tplInput.value = gw.due_template || DEFAULT_SETTINGS.sms_gateway.due_template;
         updateSmsCharCounter(tplInput.value);
     }
+    const payTplInput = document.getElementById('smsPaymentTemplate');
+    if (payTplInput) {
+        payTplInput.value = gw.payment_template || (DEFAULT_SETTINGS.sms_gateway && DEFAULT_SETTINGS.sms_gateway.payment_template) || 'সম্মানিত {name}, {mosque_name}-এ আপনার চাঁদা ৳{amount} (রশিদ নং: {receipt_no}) সফলভাবে জমা হয়েছে। ধন্যবাদ।';
+        updatePaymentSmsCharCounter(payTplInput.value);
+    }
 
     if (badge) {
         if (gw.api_key && gw.api_key.trim()) {
@@ -6011,6 +6200,7 @@ function handleSaveSmsGatewaySettings(e) {
     const key = document.getElementById('smsApiKey')?.value.trim() || '';
     const caller = document.getElementById('smsCallerId')?.value.trim() || '1234';
     const tpl = document.getElementById('smsDueTemplate')?.value.trim() || DEFAULT_SETTINGS.sms_gateway.due_template;
+    const payTpl = document.getElementById('smsPaymentTemplate')?.value.trim() || (DEFAULT_SETTINGS.sms_gateway && DEFAULT_SETTINGS.sms_gateway.payment_template);
 
     if (!key) {
         alert("অনুগ্রহ করে আপনার bulksmsdhaka.net এর API Key প্রদান করুন!");
@@ -6020,7 +6210,8 @@ function handleSaveSmsGatewaySettings(e) {
     state.settings.sms_gateway = {
         api_key: key,
         caller_id: caller,
-        due_template: tpl
+        due_template: tpl,
+        payment_template: payTpl
     };
 
     saveState();
