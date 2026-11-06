@@ -150,6 +150,65 @@
                     </div>
                 </div>
 
+                <!-- CASHIER & ADMIN: Dedicated Bank Deposit & Withdrawal Section -->
+                <div id="cashierBankTransferSection" class="chart-card" style="display: none; border: 1.5px solid #0288d1; background: #f0f9ff; margin-bottom: 20px; border-radius: 12px; padding: 15px;">
+                    <div class="chart-title" style="margin-bottom: 12px; font-size: 14px; font-weight: 700; color: #0277bd; display: flex; justify-content: space-between; align-items: center;">
+                        <span><i class="fa-solid fa-arrow-right-arrow-left"></i> ব্যাংক জমা ও উত্তোলন (ক্যাশ ⇄ ব্যাংক)</span>
+                        <span style="font-size: 11px; background: #e1f5fe; color: #01579b; padding: 3px 8px; border-radius: 12px; font-weight: 600;">ক্যাশিয়ার সেকশন</span>
+                    </div>
+
+                    <!-- Live Balance Overview -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; background: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid #b3e5fc;">
+                        <div>
+                            <span style="font-size: 11px; color: var(--text-muted); display: block;">চলতি হাতে নগদ:</span>
+                            <strong id="btLiveCash" style="font-size: 14px; color: var(--primary-color);">৳ ০.০০</strong>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="font-size: 11px; color: var(--text-muted); display: block;">চলতি ব্যাংক ব্যালেন্স:</span>
+                            <strong id="btLiveBank" style="font-size: 14px; color: #0277bd;">৳ ০.০০</strong>
+                        </div>
+                    </div>
+
+                    <!-- Direction Selector Buttons -->
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <button type="button" id="btModeDepositBtn" class="btn btn-primary" onclick="setBankTransferMode('CASH_TO_BANK')" style="flex: 1; font-size: 12px; padding: 9px 4px; background: #0288d1; border-color: #0288d1;">
+                            <i class="fa-solid fa-building-columns"></i> ব্যাংকে জমা (ক্যাশ ➔ ব্যাংক)
+                        </button>
+                        <button type="button" id="btModeWithdrawBtn" class="btn btn-secondary" onclick="setBankTransferMode('BANK_TO_CASH')" style="flex: 1; font-size: 12px; padding: 9px 4px;">
+                            <i class="fa-solid fa-money-bill-wave"></i> ব্যাংক থেকে উত্তোলন (ব্যাংক ➔ ক্যাশ)
+                        </button>
+                    </div>
+
+                    <!-- Accounting Logic Clarification Alert -->
+                    <div id="btNoticeBox" style="font-size: 12px; padding: 9px 12px; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 6px; margin-bottom: 14px; color: #1b5e20; line-height: 1.4;">
+                        <i class="fa-solid fa-circle-info"></i> <strong>হিসাবের লজিক:</strong> ব্যাংক জমা ➔ হাতে নগদ থেকে টাকা কমবে এবং সমপরিমাণ টাকা ব্যাংক হিসাবে যোগ হবে।
+                    </div>
+
+                    <form id="cashierBankTransferForm" onsubmit="handleCashierBankTransferSubmit(event)">
+                        <input type="hidden" id="btTransferMode" value="CASH_TO_BANK">
+                        
+                        <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="btDate" style="font-size: 12px; font-weight: 600;">তারিখ *</label>
+                                <input type="date" id="btDate" class="form-control" required style="font-size: 13px;">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="btAmount" style="font-size: 12px; font-weight: 600;">টাকার পরিমাণ (৳) *</label>
+                                <input type="number" id="btAmount" class="form-control" placeholder="যেমন: ৫০০০" min="1" step="any" required style="font-size: 13px;">
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 14px;">
+                            <label for="btDescription" style="font-size: 12px; font-weight: 600;">বিবরণ / ব্যাংক ও শাখার নাম *</label>
+                            <input type="text" id="btDescription" class="form-control" placeholder="যেমন: সোনালী ব্যাংক বরইতলী শাখায় জমা" required style="font-size: 13px;">
+                        </div>
+
+                        <button type="submit" id="btSubmitBtn" class="btn btn-primary" style="width: 100%; height: 40px; font-size: 13px; font-weight: 700; background: #0288d1; border-color: #0288d1; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <i class="fa-solid fa-paper-plane"></i> ব্যাংকে জমা সম্পন্ন করুন
+                        </button>
+                    </form>
+                </div>
+
                 <!-- Managing Committee Card Section -->
                 <div class="chart-card" style="margin-bottom: 20px;">
                     <div class="chart-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
@@ -165,7 +224,7 @@
                 <div id="recentTransactionsSection">
                     <div class="section-header">
                         <h3>সাম্প্রতিক লেনদেন</h3>
-                        <a href="#" onclick="switchView('reports')">সব দেখুন</a>
+                        <a href="#" onclick="openAllTransactionsModal()" style="font-size: 12px; font-weight: 600; color: var(--primary-color); text-decoration: none;"><i class="fa-solid fa-list-ul"></i> সব দেখুন</a>
                     </div>
                     <div class="list-container" id="recentTransactionsList">
                         <div style="text-align: center; color: var(--text-muted); padding: 20px;">
@@ -235,12 +294,15 @@
                     <h3>নতুন লেনদেন এন্ট্রি</h3>
                 </div>
 
-                <div class="chart-card" style="padding: 10px; margin-bottom: 20px; display: flex; gap: 10px; border-radius: 12px;">
-                    <button id="txTypeIncomeBtn" class="btn btn-primary" onclick="setTxFormType('INCOME')" style="flex: 1;">
+                <div class="chart-card" style="padding: 10px; margin-bottom: 20px; display: flex; gap: 8px; border-radius: 12px;">
+                    <button id="txTypeIncomeBtn" type="button" class="btn btn-primary" onclick="setTxFormType('INCOME')" style="flex: 1; font-size: 12px; padding: 8px 4px;">
                         <i class="fa-solid fa-plus-circle"></i> আয় (Income)
                     </button>
-                    <button id="txTypeExpenseBtn" class="btn btn-secondary" onclick="setTxFormType('EXPENSE')" style="flex: 1;">
+                    <button id="txTypeExpenseBtn" type="button" class="btn btn-secondary" onclick="setTxFormType('EXPENSE')" style="flex: 1; font-size: 12px; padding: 8px 4px;">
                         <i class="fa-solid fa-minus-circle"></i> ব্যয় (Expense)
+                    </button>
+                    <button id="txTypeTransferBtn" type="button" class="btn btn-secondary" onclick="setTxFormType('TRANSFER')" style="flex: 1.2; font-size: 12px; padding: 8px 4px;">
+                        <i class="fa-solid fa-arrow-right-arrow-left"></i> ব্যাংক জমা/উত্তোলন
                     </button>
                 </div>
 
@@ -253,13 +315,13 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="txCategory">খাত/ক্যাটাগরি *</label>
-                        <select id="txCategory" class="form-control" required>
+                        <label for="txCategory" id="txCategoryLabel">খাত/ক্যাটাগরি *</label>
+                        <select id="txCategory" class="form-control" onchange="handleCategoryChange()" required>
                             <!-- Options updated dynamically -->
                         </select>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" id="txModeGroup">
                         <label for="txMode">লেনদেন মাধ্যম *</label>
                         <select id="txMode" class="form-control" required>
                             <option value="CASH">হাতে নগদ (Cash)</option>
@@ -498,14 +560,41 @@
                             <label for="setBankAccountNo">ব্যাংক হিসাব নম্বর</label>
                             <input type="text" id="setBankAccountNo" class="form-control" placeholder="যেমন: ১২৩৪৫৬৭৮৯">
                         </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label for="setInitialBankBalance">ব্যাংক ব্যালেন্স (৳) *</label>
-                                <input type="number" id="setInitialBankBalance" class="form-control" min="0" step="any" value="0" required>
+                        <!-- Live Balances & Balance Reconciliation Section -->
+                        <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 15px;">
+                            <div style="font-size: 13px; font-weight: 700; color: var(--primary-color); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                <span><i class="fa-solid fa-scale-balanced"></i> আর্থিক তহবিল ও ব্যালেন্স স্থিতি</span>
+                                <span style="font-size: 11px; font-weight: normal; color: var(--text-muted);">বর্তমান হিসাব</span>
                             </div>
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label for="setInitialCashBalance">হাতে নগদ অর্থ (৳) *</label>
-                                <input type="number" id="setInitialCashBalance" class="form-control" min="0" step="any" value="0" required>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; background: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid #edf2f7;">
+                                <div>
+                                    <span style="font-size: 11px; color: var(--text-muted); display: block;">চলতি হাতে নগদ:</span>
+                                    <strong id="settingsLiveCash" style="font-size: 14px; color: var(--primary-color);">৳ 0.00</strong>
+                                </div>
+                                <div style="text-align: right;">
+                                    <span style="font-size: 11px; color: var(--text-muted); display: block;">চলতি ব্যাংক ব্যালেন্স:</span>
+                                    <strong id="settingsLiveBank" style="font-size: 14px; color: #1565c0;">৳ 0.00</strong>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="setInitialBankBalance">ব্যাংক ব্যালেন্স নির্ধারণ (৳) *</label>
+                                    <input type="number" id="setInitialBankBalance" class="form-control" min="0" step="any" required>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="setInitialCashBalance">হাতে নগদ অর্থ নির্ধারণ (৳) *</label>
+                                    <input type="number" id="setInitialCashBalance" class="form-control" step="any" required>
+                                </div>
+                            </div>
+
+                            <!-- Smart Checkbox: Link Bank increase to Cash reduction -->
+                            <div style="display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; padding: 8px 10px; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 6px;">
+                                <input type="checkbox" id="linkBankCashSync" checked style="margin-top: 3px; cursor: pointer;">
+                                <label for="linkBankCashSync" style="font-size: 11.5px; color: #1b5e20; margin-bottom: 0; cursor: pointer; line-height: 1.4;">
+                                    <strong>স্বয়ংক্রিয় সমন্বয়:</strong> যদি নতুন কোনো আয় ছাড়া ব্যাংক ব্যালেন্স বাড়ানো হয়, তবে সমপরিমাণ টাকা সরাসরি হাতে নগদ থেকে কমিয়ে দিন।
+                                </label>
                             </div>
                         </div>
                         <button type="submit" class="btn btn-primary" style="height: 38px;">
@@ -1003,6 +1092,26 @@
                     <input type="number" id="mCustomFee" class="form-control" value="150" min="0" step="any" required>
                 </div>
 
+                <!-- Admin Only: Direct Opening Arrears and Advance Balance Adjustments -->
+                <div id="mAdminFinancialGroup" style="display: none; background: #fbfcfe; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px 12px; margin-bottom: 15px;">
+                    <div style="font-size: 12px; font-weight: 700; color: var(--primary-color); margin-bottom: 6px;">
+                        <i class="fa-solid fa-calculator"></i> বকেয়া ও অগ্রিম স্থিতি (এডমিন)
+                    </div>
+                    <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="mOpeningArrears" style="font-size: 11px;">প্রারম্ভিক বকেয়া (৳)</label>
+                            <input type="number" id="mOpeningArrears" class="form-control" placeholder="০" min="0" step="any" style="font-size: 12px; padding: 6px 8px;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="mAdvanceBalance" style="font-size: 11px;">মোট অগ্রিম জমা (৳)</label>
+                            <input type="number" id="mAdvanceBalance" class="form-control" placeholder="০" min="0" step="any" style="font-size: 12px; padding: 6px 8px;">
+                        </div>
+                    </div>
+                    <small style="color: var(--text-muted); font-size: 10.5px; display: block; margin-top: 4px;">
+                        * অগ্রিম পরিবর্তন করলে ভবিষ্যতের সাবস্ক্রিপশন মাসগুলোতে তা স্বয়ংক্রিয়ভাবে সমন্বয় হয়ে যাবে।
+                    </small>
+                </div>
+
                 <button type="submit" class="btn btn-primary" id="saveMemberBtn">সংরক্ষণ করুন</button>
             </form>
         </div>
@@ -1107,25 +1216,31 @@
 
             <div id="secretaryArrearsPanel" class="chart-card" style="display: none; border: 1.5px solid var(--primary-color); background: #ffffff; margin-bottom: 20px; padding: 14px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
                 <div class="chart-title" style="margin-bottom: 12px; font-size: 13px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; color: var(--primary-color); border-bottom: 1px dashed #c8e6c9; padding-bottom: 8px;">
-                    <span><i class="fa-solid fa-scale-balanced"></i> বকেয়া টাকা বৃদ্ধি/হ্রাস (সমন্বয় ফরম)</span>
+                    <span><i class="fa-solid fa-scale-balanced"></i> বকেয়া ও অগ্রিম সমন্বয় ফরম</span>
                     <button type="button" onclick="toggleArrearsAdjustmentPanel()" style="background: none; border: none; font-size: 14px; color: #888; cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
                 </div>
+
+                <!-- Current Financial Snapshot Badge -->
+                <div id="adjMemberBalanceInfo" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 12px; line-height: 1.5;"></div>
+
                 <form id="arrearsAdjustmentForm" onsubmit="handleArrearsAdjustmentSubmit(event)">
                     <input type="hidden" id="adjMemberId">
                     
                     <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px;">
                         <div class="form-group">
                             <label for="adjType">সমন্বয়ের ধরন *</label>
-                            <select id="adjType" class="form-control" required style="font-size: 12px; padding: 8px;">
+                            <select id="adjType" class="form-control" onchange="updateAdjTypeHelp()" required style="font-size: 12px; padding: 8px;">
                                 <option value="decrease">বকেয়া কমান (হ্রাস/মওকুফ)</option>
                                 <option value="increase">বকেয়া বাড়ান (বৃদ্ধি/যোগ)</option>
                                 <option value="advance_increase">অগ্রিম জমা বাড়ান (যোগ)</option>
                                 <option value="advance_decrease">অগ্রিম জমা কমান (বিয়োগ)</option>
+                                <option value="advance_set">অগ্রিম জমা সরাসরি নির্ধারণ (রিসেট/সেট)</option>
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="adjAmount">টাকার পরিমাণ (৳) *</label>
-                            <input type="number" id="adjAmount" class="form-control" placeholder="টাকা লিখুন" required min="0.01" step="any" style="font-size: 12px; padding: 8px;">
+                            <label for="adjAmount" id="adjAmountLabel">টাকার পরিমাণ (৳) *</label>
+                            <input type="number" id="adjAmount" class="form-control" placeholder="টাকা লিখুন" required min="0" step="any" style="font-size: 12px; padding: 8px;">
+                            <small id="adjAmountHelp" style="font-size: 10.5px; color: var(--text-muted); display: block; margin-top: 3px;"></small>
                         </div>
                     </div>
                     <div class="form-group" style="margin-bottom: 12px;">
@@ -1221,6 +1336,37 @@
             </div>
 
             <button class="btn btn-secondary" onclick="closeModal('member-statement-modal')" style="width: 100%;">বন্ধ করুন</button>
+        </div>
+    </div>
+
+    <!-- ================== MODAL: ALL TRANSACTIONS LIST & MANAGER ================== -->
+    <div id="all-transactions-modal" class="modal-overlay" onclick="closeModalOnOverlay(event)">
+        <div class="modal-content" style="max-height: 90vh; max-width: 600px; display: flex; flex-direction: column;">
+            <div class="modal-header" style="margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                <div>
+                    <h4 style="font-size: 16px; font-weight: 700; color: var(--primary-dark);">
+                        <i class="fa-solid fa-list-check" style="color: var(--primary-color); margin-right: 6px;"></i>সকল লেনদেন তালিকা
+                    </h4>
+                    <span style="font-size: 11px; color: var(--text-muted);">মোট <span id="allTxModalCount">০</span>টি লেনদেন</span>
+                </div>
+                <button class="icon-btn" onclick="closeModal('all-transactions-modal')" style="background: none; color: var(--text-main); font-size: 18px;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- Search & Filter Bar -->
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <input type="text" id="allTxSearchInput" class="form-control" placeholder="🔍 বিবরণ, খাত বা তারিখ খুঁজুন..." oninput="filterAllTransactionsList()" style="font-size: 12px; margin-bottom: 0;">
+                <select id="allTxTypeFilter" class="form-control" onchange="filterAllTransactionsList()" style="font-size: 12px; width: 140px; margin-bottom: 0;">
+                    <option value="ALL">সকল ধরন</option>
+                    <option value="INCOME">আয় (+)</option>
+                    <option value="EXPENSE">ব্যয় (-)</option>
+                    <option value="TRANSFER">স্থানান্তর (⇄)</option>
+                </select>
+            </div>
+
+            <!-- Scrollable Transactions List -->
+            <div id="allTxModalList" class="list-container" style="flex: 1; overflow-y: auto; max-height: 55vh; padding-right: 4px; box-shadow: none; border: 1px solid var(--border-color); border-radius: 10px; padding: 6px;">
+                <!-- Dynamically rendered -->
+            </div>
         </div>
     </div>
 

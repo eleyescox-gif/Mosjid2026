@@ -615,6 +615,10 @@ body {
     color: var(--danger-color);
 }
 
+.tx-amount.transfer {
+    color: #0288d1;
+}
+
 .tx-mode {
     font-size: 9px;
     background: var(--border-color);

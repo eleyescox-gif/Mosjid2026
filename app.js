@@ -16,7 +16,9 @@ const CATEGORIES_BN = {
     'MuazzinSalary': 'মুয়াজ্জিনের বেতন',
     'KhatibSalary': 'খতিবের বেতন',
     'Maintenance': 'মসজিদ সংস্কার/রক্ষণাবেক্ষণ',
-    'Others_Expense': 'অন্যান্য ব্যয়'
+    'Others_Expense': 'অন্যান্য ব্যয়',
+    'Transfer_Deposit': 'ক্যাশ থেকে ব্যাংকে জমা',
+    'Transfer_Withdrawal': 'ব্যাংক থেকে ক্যাশে উত্তোলন'
 };
 
 // Default User Credentials Configuration
@@ -321,6 +323,11 @@ function formatShortDateBN(dateStr) {
 function processAdvanceDeductions(preferredReceiptNo, paymentDate) {
     let stateChanged = false;
     const now = new Date();
+    // FIX: Only fill months up to the CURRENT month. Future months stay in
+    // member.advance_balance and get auto-applied each month on app load/refresh.
+    // This prevents incorrectly pre-filling Dec/Jan when only 7 months are paid.
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
 
     state.members.forEach(member => {
         if (member.status !== 'Active' || member.member_type === 'Free') return;
@@ -339,15 +346,20 @@ function processAdvanceDeductions(preferredReceiptNo, paymentDate) {
         let m = joinMonth;
 
         while (advance > 0) {
+            // CRITICAL FIX: Stop at current month. Never pre-fill future months.
+            // If a member pays 10 months in July, only 4 months (Jul-Oct when current=Oct) 
+            // get marked paid; the rest stays as advance_balance until months arrive.
+            if (year > curYear || (year === curYear && m > curMonth)) break;
+
             let sub = state.subscriptions.find(s => s.member_id === member.id && s.year === year && s.month === m);
             if (!sub) {
                 sub = {
-                    id: `sub-${member.id}-${year}-${m}`,
+                    id: 'sub-' + member.id + '-' + year + '-' + m,
                     member_id: member.id,
                     year: year,
                     month: m,
                     amount_paid: 0,
-                    due_amount: member.monthly_fee,
+                    due_amount: fee,
                     status: 'Unpaid',
                     last_payment_date: ''
                 };
@@ -355,32 +367,23 @@ function processAdvanceDeductions(preferredReceiptNo, paymentDate) {
                 stateChanged = true;
             }
 
-            const currentDue = member.monthly_fee - parseFloat(sub.amount_paid);
+            const currentDue = fee - parseFloat(sub.amount_paid || 0);
             if (currentDue > 0) {
                 const deductAmount = Math.min(advance, currentDue);
-                sub.amount_paid = parseFloat(sub.amount_paid) + deductAmount;
-                sub.due_amount = member.monthly_fee - sub.amount_paid;
+                sub.amount_paid = parseFloat(sub.amount_paid || 0) + deductAmount;
+                sub.due_amount = fee - sub.amount_paid;
                 sub.status = sub.due_amount <= 0 ? 'Paid' : 'Partial';
                 sub.last_payment_date = paymentDate || (now.toISOString().split('T')[0]);
                 sub.receipt_no = (preferredReceiptNo && member.id === state.activeMemberId) ? preferredReceiptNo : (sub.receipt_no || 'ADVANCE');
-
                 advance -= deductAmount;
                 stateChanged = true;
             }
 
             // Move to next month
             m++;
-            if (m > 12) {
-                m = 1;
-                year++;
-            }
-
-            // Safety limit checks
+            if (m > 12) { m = 1; year++; }
             if (advance <= 0) break;
-            if (member.monthly_fee <= 0) break;
-            
-            // Limit advance allocation to up to 2 years in the future to prevent infinite loops on invalid data
-            if (year > now.getFullYear() + 2) break;
+            if (fee <= 0) break;
         }
 
         if (parseFloat(member.advance_balance || 0) !== advance) {
@@ -742,6 +745,7 @@ function applyRolePermissions() {
     const adayKhataSec = document.getElementById('adminAdayKhataSection');
     const exportSec = document.getElementById('adminExportSection');
     const smsGatewaySec = document.getElementById('adminSmsGatewaySection');
+    const cashierBankTransferSec = document.getElementById('cashierBankTransferSection');
 
     // Default states (Closed/Hidden for general safety)
     navTx.style.display = 'none';
@@ -755,6 +759,7 @@ function applyRolePermissions() {
     easyPay.style.display = 'none';
     settingsSec.style.display = 'none';
     commSection.style.display = 'none';
+    if (cashierBankTransferSec) cashierBankTransferSec.style.display = 'none';
     if (binSection) binSection.style.display = 'none';
     if (globalBinSec) globalBinSec.style.display = 'none';
     if (jsonBackupSec) jsonBackupSec.style.display = 'none';
@@ -770,7 +775,14 @@ function applyRolePermissions() {
     document.getElementById('mTypeGroup').style.display = 'none';
     document.getElementById('mCustomFeeGroup').style.display = 'none';
 
+    // Pre-fill cashier bank transfer date if empty
+    const today = new Date().toISOString().split('T')[0];
+    const btDateInput = document.getElementById('btDate');
+    if (btDateInput && !btDateInput.value) btDateInput.value = today;
+
     if (role === 'admin') {
+        navTx.style.display = 'flex';
+        if (cashierBankTransferSec) cashierBankTransferSec.style.display = 'block';
         pendingSec.style.display = 'block';
         changePassSec.style.display = 'block';
         systemControls.style.display = 'block';
@@ -808,12 +820,13 @@ function applyRolePermissions() {
         document.getElementById('mCustomFeeGroup').style.display = 'none';
     } 
     else if (role === 'cashier') {
-        navTx.style.display = 'flex'; // Only cashier can see FAB to post money
+        navTx.style.display = 'flex'; // Cashier can see FAB to post money
+        if (cashierBankTransferSec) cashierBankTransferSec.style.display = 'block'; // Cashier sees bank transfer section
         addMemberBtn.style.display = 'none';
         changePassSec.style.display = 'none';
         systemControls.style.display = 'none';
         settingsSec.style.display = 'none';
-        easyPay.style.display = 'block'; // Only cashier can see regular payment panel
+        easyPay.style.display = 'block'; // Cashier can see regular payment panel
     } 
     else if (role === 'president') {
         addMemberBtn.style.display = 'none';
@@ -841,16 +854,49 @@ function handleSettingsSubmit(e) {
     const estYear = document.getElementById('setEstYear') ? document.getElementById('setEstYear').value.trim() : '';
     const memoPrefix = document.getElementById('setMemoPrefix') ? document.getElementById('setMemoPrefix').value.trim() : '';
     const bankAccountNo = document.getElementById('setBankAccountNo').value.trim();
-    const initialBank = parseFloat(document.getElementById('setInitialBankBalance').value) || 0;
-    const initialCash = parseFloat(document.getElementById('setInitialCashBalance').value) || 0;
+    const targetBank = parseFloat(document.getElementById('setInitialBankBalance').value) || 0;
+    const targetCash = parseFloat(document.getElementById('setInitialCashBalance').value) || 0;
+    const prevLiveBank = parseFloat(document.getElementById('setInitialBankBalance').dataset.prevLiveBank || targetBank);
+    const prevLiveCash = parseFloat(document.getElementById('setInitialCashBalance').dataset.prevLiveCash || targetCash);
+    const linkSync = document.getElementById('linkBankCashSync') ? document.getElementById('linkBankCashSync').checked : true;
+
+    let finalTargetCash = targetCash;
+    const bankDiff = targetBank - prevLiveBank;
+
+    // "যদি আয় না হয়ে ব্যাংক হিসাবে অর্থ বাড়ে তাহলে সেটি হাতে নগদ থেকে কমে যাবে।"
+    if (linkSync && Math.abs(bankDiff) > 0.01 && Math.abs(targetCash - prevLiveCash) < 0.01) {
+        finalTargetCash = prevLiveCash - bankDiff;
+    }
+
+    // Compute net transactions
+    let netTxCash = 0, netTxBank = 0;
+    (state.transactions || []).forEach(tx => {
+        const val = parseFloat(tx.amount || 0);
+        const pm = (tx.payment_mode || tx.payment_method || 'CASH').toUpperCase();
+        if (tx.transaction_type === 'INCOME') {
+            if (pm === 'BANK') netTxBank += val;
+            else netTxCash += val;
+        } else if (tx.transaction_type === 'EXPENSE') {
+            if (pm === 'BANK') netTxBank -= val;
+            else netTxCash -= val;
+        } else if (tx.transaction_type === 'TRANSFER') {
+            if (pm === 'CASH_TO_BANK') {
+                netTxCash -= val;
+                netTxBank += val;
+            } else if (pm === 'BANK_TO_CASH') {
+                netTxCash += val;
+                netTxBank -= val;
+            }
+        }
+    });
 
     state.settings.mosque_name = newName;
     state.settings.mosque_address = newAddress;
     state.settings.established_year = estYear;
     state.settings.memo_prefix = memoPrefix;
     state.settings.bank_account_no = bankAccountNo;
-    state.settings.initial_bank_balance = initialBank;
-    state.settings.initial_cash_balance = initialCash;
+    state.settings.initial_bank_balance = targetBank - netTxBank;
+    state.settings.initial_cash_balance = finalTargetCash - netTxCash;
     
     if (uploadedLogoBase64) {
         state.settings.logo_base64 = uploadedLogoBase64;
@@ -858,13 +904,14 @@ function handleSettingsSubmit(e) {
 
     saveState();
     applySettingsToUI();
-    calculateFundBalances(); // Recalculate dashboard values immediately with new initial balances!
+    calculateFundBalances();
+    populateSettingsInputs();
     
     document.getElementById('setMosqueLogo').value = '';
     document.getElementById('logoPreviewContainer').style.display = 'none';
     uploadedLogoBase64 = '';
 
-    alert("প্রতিষ্ঠানের সেটিংস সফলভাবে আপডেট করা হয়েছে।");
+    alert("প্রতিষ্ঠানের সেটিংস ও আর্থিক ব্যালেন্স সফলভাবে আপডেট করা হয়েছে।\nবর্তমান হাতে নগদ: " + formatCurrency(finalTargetCash) + "\nবর্তমান ব্যাংক ব্যালেন্স: " + formatCurrency(targetBank));
 }
 
 // Populate Settings Form inputs on view show
@@ -878,8 +925,45 @@ function populateSettingsInputs() {
         document.getElementById('setMemoPrefix').value = state.settings.memo_prefix || 'পুমোপাজাম/২০২৬/';
     }
     document.getElementById('setBankAccountNo').value = state.settings.bank_account_no || '';
-    document.getElementById('setInitialBankBalance').value = state.settings.initial_bank_balance || 0;
-    document.getElementById('setInitialCashBalance').value = state.settings.initial_cash_balance || 0;
+
+    // Calculate current live balances
+    let liveCash = parseFloat(state.settings.initial_cash_balance || 0);
+    let liveBank = parseFloat(state.settings.initial_bank_balance || 0);
+    (state.transactions || []).forEach(tx => {
+        const val = parseFloat(tx.amount || 0);
+        const pm = (tx.payment_mode || tx.payment_method || 'CASH').toUpperCase();
+        if (tx.transaction_type === 'INCOME') {
+            if (pm === 'BANK') liveBank += val;
+            else liveCash += val;
+        } else if (tx.transaction_type === 'EXPENSE') {
+            if (pm === 'BANK') liveBank -= val;
+            else liveCash -= val;
+        } else if (tx.transaction_type === 'TRANSFER') {
+            if (pm === 'CASH_TO_BANK') {
+                liveCash -= val;
+                liveBank += val;
+            } else if (pm === 'BANK_TO_CASH') {
+                liveCash += val;
+                liveBank -= val;
+            }
+        }
+    });
+
+    const liveCashEl = document.getElementById('settingsLiveCash');
+    const liveBankEl = document.getElementById('settingsLiveBank');
+    if (liveCashEl) liveCashEl.innerText = formatCurrency(liveCash);
+    if (liveBankEl) liveBankEl.innerText = formatCurrency(liveBank);
+
+    const bankInput = document.getElementById('setInitialBankBalance');
+    const cashInput = document.getElementById('setInitialCashBalance');
+    if (bankInput) {
+        bankInput.value = liveBank.toFixed(2);
+        bankInput.dataset.prevLiveBank = liveBank.toFixed(2);
+    }
+    if (cashInput) {
+        cashInput.value = liveCash.toFixed(2);
+        cashInput.dataset.prevLiveCash = liveCash.toFixed(2);
+    }
     
     const logoPreviewContainer = document.getElementById('logoPreviewContainer');
     const logoPreviewImg = document.getElementById('logoPreviewImg');
@@ -1298,13 +1382,22 @@ function calculateFundBalances() {
     let totalBank = parseFloat(state.settings.initial_bank_balance || 0);
     
     state.transactions.forEach(tx => {
-        const val = parseFloat(tx.amount);
+        const val = parseFloat(tx.amount || 0);
+        const pm = (tx.payment_mode || tx.payment_method || 'CASH').toUpperCase();
         if (tx.transaction_type === 'INCOME') {
-            if (tx.payment_mode === 'CASH') totalCash += val;
-            else if (tx.payment_mode === 'BANK') totalBank += val;
+            if (pm === 'BANK') totalBank += val;
+            else totalCash += val;
         } else if (tx.transaction_type === 'EXPENSE') {
-            if (tx.payment_mode === 'CASH') totalCash -= val;
-            else if (tx.payment_mode === 'BANK') totalBank -= val;
+            if (pm === 'BANK') totalBank -= val;
+            else totalCash -= val;
+        } else if (tx.transaction_type === 'TRANSFER') {
+            if (pm === 'CASH_TO_BANK') {
+                totalCash -= val;
+                totalBank += val;
+            } else if (pm === 'BANK_TO_CASH') {
+                totalBank -= val;
+                totalCash += val;
+            }
         }
     });
 
@@ -1312,6 +1405,11 @@ function calculateFundBalances() {
     document.getElementById('totalBalance').innerText = formatCurrency(total);
     document.getElementById('cashBalance').innerText = formatCurrency(totalCash);
     document.getElementById('bankBalance').innerText = formatCurrency(totalBank);
+
+    const btLiveCashEl = document.getElementById('btLiveCash');
+    const btLiveBankEl = document.getElementById('btLiveBank');
+    if (btLiveCashEl) btLiveCashEl.innerText = '৳ ' + formatCurrency(totalCash);
+    if (btLiveBankEl) btLiveBankEl.innerText = '৳ ' + formatCurrency(totalBank);
 }
 
 // Update Dashboard summary stats
@@ -1346,8 +1444,8 @@ function switchView(viewId) {
     if (!state.currentUser) return;
 
     const role = state.currentUser.role;
-    if (viewId === 'add-transaction' && role !== 'cashier') {
-        alert("শুধুমাত্র ক্যাশিয়ার লেনদেন এন্ট্রি করতে পারবেন!");
+    if (viewId === 'add-transaction' && role !== 'cashier' && role !== 'admin') {
+        alert("শুধুমাত্র ক্যাশিয়ার ও এডমিন লেনদেন এন্ট্রি করতে পারবেন!");
         return;
     }
     if (role === 'member' && viewId === 'profile') {
@@ -1397,13 +1495,16 @@ function switchView(viewId) {
 // Render Recent Transactions
 function renderRecentTransactions() {
     const container = document.getElementById('recentTransactionsList');
+    if (!container) return;
     container.innerHTML = '';
     
-    const recents = state.transactions.slice(0, 5);
+    const recents = state.transactions.slice(0, 8);
     if (recents.length === 0) {
         container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;">কোনো লেনদেনের রেকর্ড পাওয়া যায়নি।</div>';
         return;
     }
+
+    const canDelete = state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'cashier');
 
     recents.forEach(tx => {
         const item = document.createElement('div');
@@ -1417,28 +1518,220 @@ function renderRecentTransactions() {
         else if (tx.category === 'ElectricityBill') icon = 'fa-bolt';
         else if (tx.category === 'Maintenance') icon = 'fa-hammer';
         else if (tx.category === 'LandLease') icon = 'fa-mountain';
+        else if (tx.transaction_type === 'TRANSFER') icon = 'fa-arrow-right-arrow-left';
 
         const isInc = tx.transaction_type === 'INCOME';
+        const isTransfer = tx.transaction_type === 'TRANSFER';
+
+        let amtClass = isInc ? 'inc' : 'exp';
+        let amtSign = isInc ? '+' : '-';
+        if (isTransfer) {
+            amtClass = 'transfer';
+            amtSign = '⇄';
+        }
+
+        let modeText = 'ক্যাশ';
+        if (tx.payment_mode === 'BANK') modeText = 'ব্যাংক';
+        else if (tx.payment_mode === 'CASH_TO_BANK') modeText = 'ক্যাশ ➔ ব্যাংক';
+        else if (tx.payment_mode === 'BANK_TO_CASH') modeText = 'ব্যাংক ➔ ক্যাশ';
+
+        const deleteBtnHtml = canDelete ? `
+            <button type="button" onclick="deleteTransaction('${tx.id}', event)" title="লেনদেন মুছুন" style="background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; border-radius: 6px; padding: 5px 9px; cursor: pointer; font-size: 11px; margin-left: 6px; transition: all .2s;">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        ` : '';
+
         item.innerHTML = `
-            <div class="tx-left">
-                <div class="tx-category-icon">
+            <div class="tx-left" style="gap: 10px;">
+                <div class="tx-category-icon" style="width: 34px; height: 34px; font-size: 13px;">
                     <i class="fa-solid ${icon}"></i>
                 </div>
                 <div class="tx-details">
-                    <h5>${tx.description || CATEGORIES_BN[tx.category] || tx.category}</h5>
-                    <p>${formatDate(tx.date)}</p>
+                    <h5 style="font-size: 13px; margin-bottom: 2px;">${tx.description || CATEGORIES_BN[tx.category] || tx.category}</h5>
+                    <p style="font-size: 11px;">${formatDate(tx.date)} ${tx.receipt_no ? `| রশিদ: ${englishToBanglaNum(tx.receipt_no)}` : ''}</p>
                 </div>
             </div>
-            <div class="tx-right">
-                <div class="tx-amount ${isInc ? 'inc' : 'exp'}">
-                    ${isInc ? '+' : '-'}৳ ${englishToBanglaNum(tx.amount.toString())}
+            <div class="tx-right" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+                <div style="text-align: right;">
+                    <div class="tx-amount ${amtClass}">
+                        ${amtSign}৳ ${englishToBanglaNum(parseFloat(tx.amount || 0).toFixed(2))}
+                    </div>
+                    <span class="tx-mode">${modeText}</span>
                 </div>
-                <span class="tx-mode">${tx.payment_mode === 'CASH' ? 'ক্যাশ' : 'ব্যাংক'}</span>
+                ${deleteBtnHtml}
             </div>
         `;
         container.appendChild(item);
     });
 }
+
+// Delete Transaction with confirmation, balance update and recycle bin backup
+function deleteTransaction(txId, event) {
+    if (event) event.stopPropagation();
+    
+    if (!state.currentUser || (state.currentUser.role !== 'admin' && state.currentUser.role !== 'cashier')) {
+        alert("শুধুমাত্র এডমিন বা ক্যাশিয়ার লেনদেন মুছে ফেলতে পারবেন!");
+        return;
+    }
+
+    const txIndex = state.transactions.findIndex(t => t.id === txId);
+    if (txIndex === -1) {
+        alert("লেনদেনটি খুঁজে পাওয়া যায়নি!");
+        return;
+    }
+
+    const tx = state.transactions[txIndex];
+    const desc = tx.description || CATEGORIES_BN[tx.category] || tx.category || 'লেনদেন';
+    const typeLabel = tx.transaction_type === 'INCOME' ? 'আয় (+)' : (tx.transaction_type === 'EXPENSE' ? 'ব্যয় (-)' : 'ব্যাংক স্থানান্তর (⇄)');
+    const amountStr = englishToBanglaNum(parseFloat(tx.amount || 0).toFixed(2));
+
+    const confirmMsg = `আপনি কি নিশ্চিত যে এই লেনদেনটি ডিলিট করতে চান?\n\n• বিবরণ: ${desc}\n• তারিখ: ${tx.date}\n• ধরন: ${typeLabel}\n• পরিমাণ: ৳ ${amountStr}\n\nডিলিট করলে ক্যাশ ও ব্যাংক ব্যালেন্স স্বয়ংক্রিয়ভাবে সমন্বয় হবে।`;
+    
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+
+    // Safety backup to global recycle bin
+    if (!state.global_recycle_bin) state.global_recycle_bin = [];
+    state.global_recycle_bin.unshift({
+        type: 'TRANSACTION',
+        data: { ...tx },
+        deleted_at: new Date().toISOString(),
+        deleted_by: state.currentUser.name || state.currentUser.role
+    });
+
+    // If subscription payment with receipt_no and member_id
+    if (tx.member_id && tx.receipt_no) {
+        state.subscriptions.forEach(s => {
+            if (s.member_id === tx.member_id && String(s.receipt_no) === String(tx.receipt_no)) {
+                s.status = 'Unpaid';
+                s.amount_paid = 0;
+                s.receipt_no = '';
+                delete s.payment_date;
+                delete s.last_payment_date;
+            }
+        });
+    }
+
+    // Remove transaction
+    state.transactions.splice(txIndex, 1);
+
+    saveState();
+    refreshAppUI();
+
+    // Re-render modal list if open
+    const modal = document.getElementById('all-transactions-modal');
+    if (modal && modal.classList.contains('active')) {
+        renderAllTransactionsModalList();
+    }
+
+    alert(`"${desc}" (৳ ${amountStr}) লেনদেনটি সফলভাবে মুছে ফেলা হয়েছে।`);
+}
+
+// ── All Transactions Modal & Manager ──
+function openAllTransactionsModal() {
+    openModal('all-transactions-modal');
+    renderAllTransactionsModalList();
+}
+
+function filterAllTransactionsList() {
+    renderAllTransactionsModalList();
+}
+
+function renderAllTransactionsModalList() {
+    const listContainer = document.getElementById('allTxModalList');
+    const countEl = document.getElementById('allTxModalCount');
+    const searchVal = (document.getElementById('allTxSearchInput')?.value || '').toLowerCase().trim();
+    const typeFilter = document.getElementById('allTxTypeFilter')?.value || 'ALL';
+
+    if (!listContainer) return;
+    listContainer.innerHTML = '';
+
+    const canDelete = state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'cashier');
+
+    let filtered = state.transactions.filter(tx => {
+        if (typeFilter !== 'ALL' && tx.transaction_type !== typeFilter) return false;
+        if (searchVal) {
+            const desc = (tx.description || '').toLowerCase();
+            const cat = (CATEGORIES_BN[tx.category] || tx.category || '').toLowerCase();
+            const date = (tx.date || '').toLowerCase();
+            const amt = (tx.amount || '').toString();
+            const receipt = (tx.receipt_no || '').toString();
+            if (!desc.includes(searchVal) && !cat.includes(searchVal) && !date.includes(searchVal) && !amt.includes(searchVal) && !receipt.includes(searchVal)) {
+                return false;
+            }
+        }
+        return true;
+    });
+
+    if (countEl) countEl.innerText = englishToBanglaNum(filtered.length.toString());
+
+    if (filtered.length === 0) {
+        listContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 25px; font-size: 13px;">কোনো লেনদেন পাওয়া যায়নি।</div>';
+        return;
+    }
+
+    filtered.forEach(tx => {
+        const item = document.createElement('div');
+        item.className = 'transaction-item';
+        item.style.marginBottom = '8px';
+        item.style.padding = '10px 12px';
+
+        let icon = 'fa-receipt';
+        if (tx.category === 'Subscription') icon = 'fa-users';
+        else if (tx.category === 'Jummah') icon = 'fa-mosque';
+        else if (tx.category === 'Donation') icon = 'fa-hand-holding-heart';
+        else if (tx.category === 'ImamSalary' || tx.category === 'MuazzinSalary' || tx.category === 'KhatibSalary') icon = 'fa-user-tie';
+        else if (tx.category === 'ElectricityBill') icon = 'fa-bolt';
+        else if (tx.category === 'Maintenance') icon = 'fa-hammer';
+        else if (tx.category === 'LandLease') icon = 'fa-mountain';
+        else if (tx.transaction_type === 'TRANSFER') icon = 'fa-arrow-right-arrow-left';
+
+        const isInc = tx.transaction_type === 'INCOME';
+        const isTransfer = tx.transaction_type === 'TRANSFER';
+
+        let amtClass = isInc ? 'inc' : 'exp';
+        let amtSign = isInc ? '+' : '-';
+        if (isTransfer) {
+            amtClass = 'transfer';
+            amtSign = '⇄';
+        }
+
+        let modeText = 'ক্যাশ';
+        if (tx.payment_mode === 'BANK') modeText = 'ব্যাংক';
+        else if (tx.payment_mode === 'CASH_TO_BANK') modeText = 'ক্যাশ ➔ ব্যাংক';
+        else if (tx.payment_mode === 'BANK_TO_CASH') modeText = 'ব্যাংক ➔ ক্যাশ';
+
+        const deleteBtnHtml = canDelete ? `
+            <button type="button" onclick="deleteTransaction('${tx.id}', event)" title="লেনদেন মুছুন" style="background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; border-radius: 6px; padding: 5px 9px; cursor: pointer; font-size: 11px; margin-left: 6px; transition: all .2s;">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        ` : '';
+
+        item.innerHTML = `
+            <div class="tx-left" style="gap: 10px;">
+                <div class="tx-category-icon" style="width: 32px; height: 32px; font-size: 13px;">
+                    <i class="fa-solid ${icon}"></i>
+                </div>
+                <div class="tx-details">
+                    <h5 style="font-size: 12.5px; margin-bottom: 2px;">${tx.description || CATEGORIES_BN[tx.category] || tx.category}</h5>
+                    <p style="font-size: 11px;">${formatDate(tx.date)} ${tx.receipt_no ? `| রশিদ: ${englishToBanglaNum(tx.receipt_no)}` : ''}</p>
+                </div>
+            </div>
+            <div class="tx-right" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+                <div style="text-align: right;">
+                    <div class="tx-amount ${amtClass}" style="font-size: 13px;">
+                        ${amtSign}৳ ${englishToBanglaNum(parseFloat(tx.amount || 0).toFixed(2))}
+                    </div>
+                    <span class="tx-mode">${modeText}</span>
+                </div>
+                ${deleteBtnHtml}
+            </div>
+        `;
+        listContainer.appendChild(item);
+    });
+}
+
 
 // ADMIN ONLY: Render Pending Members
 function renderPendingMembers() {
@@ -1732,6 +2025,109 @@ function getMemberAdvanceBalance(memberId) {
 }
 window.getMemberAdvanceBalance = getMemberAdvanceBalance;
 
+// Set or Adjust Total Advance Balance for a Member (handling both unallocated balance and future subscription months)
+function setMemberTotalAdvance(member, targetAdvance) {
+    if (!member) return;
+    targetAdvance = Math.max(0, parseFloat(targetAdvance || 0));
+    const currentTotalAdv = getMemberAdvanceBalance(member.id);
+    
+    if (Math.abs(targetAdvance - currentTotalAdv) < 0.01) {
+        return; // No change needed
+    }
+
+    if (targetAdvance < currentTotalAdv) {
+        // Decrease advance by (currentTotalAdv - targetAdvance)
+        let remainingToDeduct = currentTotalAdv - targetAdvance;
+        
+        // 1. Deduct unallocated advance_balance first
+        let unallocated = parseFloat(member.advance_balance || 0);
+        if (unallocated > 0) {
+            let deductUnalloc = Math.min(unallocated, remainingToDeduct);
+            member.advance_balance = unallocated - deductUnalloc;
+            remainingToDeduct -= deductUnalloc;
+        }
+
+        // 2. If still remaining, rollback future subscriptions in reverse order (latest future month first)
+        if (remainingToDeduct > 0) {
+            const now = new Date();
+            const curYear = now.getFullYear();
+            const curMonth = now.getMonth() + 1;
+
+            const futureSubs = (state.subscriptions || []).filter(s => 
+                s.member_id === member.id && 
+                parseFloat(s.amount_paid || 0) > 0 && 
+                (s.year > curYear || (s.year === curYear && s.month > curMonth))
+            ).sort((a, b) => {
+                if (b.year !== a.year) return b.year - a.year;
+                return b.month - a.month;
+            });
+
+            for (const sub of futureSubs) {
+                const paid = parseFloat(sub.amount_paid || 0);
+                const deduct = Math.min(paid, remainingToDeduct);
+                sub.amount_paid = paid - deduct;
+                sub.due_amount = parseFloat(member.monthly_fee || 0) - sub.amount_paid;
+                if (sub.due_amount < 0) sub.due_amount = 0;
+                sub.status = sub.amount_paid <= 0 ? 'Unpaid' : (sub.due_amount <= 0 ? 'Paid' : 'Partial');
+                if (sub.amount_paid <= 0) {
+                    sub.receipt_no = '';
+                    sub.last_payment_date = '';
+                }
+                remainingToDeduct -= deduct;
+                if (remainingToDeduct <= 0) break;
+            }
+        }
+    } else {
+        // Increase advance by (targetAdvance - currentTotalAdv)
+        const diff = targetAdvance - currentTotalAdv;
+        member.advance_balance = parseFloat(member.advance_balance || 0) + diff;
+        processAdvanceDeductions();
+    }
+}
+window.setMemberTotalAdvance = setMemberTotalAdvance;
+
+// Dynamic helper text for arrears & advance adjustment panel
+function updateAdjTypeHelp() {
+    const typeEl = document.getElementById('adjType');
+    const amountLabel = document.getElementById('adjAmountLabel');
+    const amountInput = document.getElementById('adjAmount');
+    const helpEl = document.getElementById('adjAmountHelp');
+    const memberId = document.getElementById('adjMemberId') ? document.getElementById('adjMemberId').value : '';
+    const member = (state.members || []).find(m => m && m.id && m.id.toString() === memberId.toString());
+    const curAdv = member ? getMemberAdvanceBalance(member.id) : 0;
+
+    if (!typeEl || !amountInput) return;
+    const val = typeEl.value;
+
+    if (val === 'decrease') {
+        if (amountLabel) amountLabel.innerText = 'বকেয়া কমানোর পরিমাণ (৳) *';
+        amountInput.placeholder = 'টাকার পরিমাণ লিখুন';
+        amountInput.min = '0.01';
+        if (helpEl) helpEl.innerText = 'সদস্যের প্রারম্ভিক বকেয়া থেকে এই পরিমাণ টাকা বাদ যাবে।';
+    } else if (val === 'increase') {
+        if (amountLabel) amountLabel.innerText = 'বকেয়া বৃদ্ধির পরিমাণ (৳) *';
+        amountInput.placeholder = 'টাকার পরিমাণ লিখুন';
+        amountInput.min = '0.01';
+        if (helpEl) helpEl.innerText = 'সদস্যের হিসাবে অতিরিক্ত বকেয়া যোগ হবে।';
+    } else if (val === 'advance_increase') {
+        if (amountLabel) amountLabel.innerText = 'অগ্রিম জমা বৃদ্ধির পরিমাণ (৳) *';
+        amountInput.placeholder = 'টাকার পরিমাণ লিখুন';
+        amountInput.min = '0.01';
+        if (helpEl) helpEl.innerText = 'সদস্যের তহবিলে অতিরিক্ত অগ্রিম টাকা যোগ হবে।';
+    } else if (val === 'advance_decrease') {
+        if (amountLabel) amountLabel.innerText = 'অগ্রিম কমানোর পরিমাণ (৳) *';
+        amountInput.placeholder = `সর্বোচ্চ ৳ ${curAdv.toFixed(0)}`;
+        amountInput.min = '0.01';
+        if (helpEl) helpEl.innerText = `বর্তমান মোট অগ্রিম জমা: ৳ ${englishToBanglaNum(curAdv.toFixed(0))}। এখান থেকে যত টাকা কমাতে চান তা লিখুন।`;
+    } else if (val === 'advance_set') {
+        if (amountLabel) amountLabel.innerText = 'নতুন নির্ধারিত মোট অগ্রিম (৳) *';
+        amountInput.placeholder = '০ বা কাঙ্ক্ষিত ব্যালেন্স লিখুন';
+        amountInput.min = '0';
+        if (helpEl) helpEl.innerText = `অগ্রিম পুরোপুরি বাতিল/শূন্য করতে ০ লিখুন (বর্তমান জমা: ৳ ${englishToBanglaNum(curAdv.toFixed(0))})।`;
+    }
+}
+window.updateAdjTypeHelp = updateAdjTypeHelp;
+
 // Modal management
 function openModal(modalId) {
     document.getElementById(modalId).classList.add('active');
@@ -1789,6 +2185,17 @@ function handleNewMemberSubmit(e) {
             if (role === 'admin') {
                 state.members[mIndex].member_type = type;
                 state.members[mIndex].monthly_fee = fee;
+
+                const opEl = document.getElementById('mOpeningArrears');
+                if (opEl && opEl.value !== '') {
+                    state.members[mIndex].opening_arrears = Math.max(0, parseFloat(opEl.value) || 0);
+                }
+
+                const advEl = document.getElementById('mAdvanceBalance');
+                if (advEl && advEl.value !== '') {
+                    const newAdv = Math.max(0, parseFloat(advEl.value) || 0);
+                    setMemberTotalAdvance(state.members[mIndex], newAdv);
+                }
             }
             
             saveState();
@@ -1816,6 +2223,17 @@ function handleNewMemberSubmit(e) {
             status: initialStatus,
             join_date: new Date().toISOString().split('T')[0]
         };
+
+        if (role === 'admin') {
+            const opEl = document.getElementById('mOpeningArrears');
+            if (opEl && opEl.value !== '') {
+                newMember.opening_arrears = Math.max(0, parseFloat(opEl.value) || 0);
+            }
+            const advEl = document.getElementById('mAdvanceBalance');
+            if (advEl && advEl.value !== '') {
+                newMember.advance_balance = Math.max(0, parseFloat(advEl.value) || 0);
+            }
+        }
 
         state.members.push(newMember);
 
@@ -2171,6 +2589,25 @@ function openMemberDetails(memberId) {
         document.getElementById('adjMemberId').value = memberId;
         document.getElementById('adjAmount').value = '';
         document.getElementById('adjReason').value = '';
+
+        // Update live balance info inside panel
+        const balInfo = document.getElementById('adjMemberBalanceInfo');
+        if (balInfo) {
+            const curDue = calculateMemberTotalDue(member.id);
+            const curAdv = getMemberAdvanceBalance(member.id);
+            const opArr = parseFloat(member.opening_arrears || 0);
+            balInfo.innerHTML = `
+                <div style="font-weight: 600; color: var(--primary-color); margin-bottom: 4px;">
+                    <i class="fa-solid fa-circle-info"></i> সদস্যের বর্তমান হিসাব স্থিতি:
+                </div>
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                    <span>চলতি বকেয়া: <b style="color: ${curDue > 0 ? 'var(--danger-color)' : 'var(--success-color)'};">৳ ${englishToBanglaNum(curDue.toFixed(0))}</b></span>
+                    <span>প্রারম্ভিক বকেয়া: <b>৳ ${englishToBanglaNum(opArr.toFixed(0))}</b></span>
+                    <span>মোট অগ্রিম জমা: <b style="color: var(--success-color);">৳ ${englishToBanglaNum(curAdv.toFixed(0))}</b></span>
+                </div>
+            `;
+        }
+        if (typeof updateAdjTypeHelp === 'function') updateAdjTypeHelp();
     } else {
         if (toggleBtn) toggleBtn.style.display = 'none';
     }
@@ -2475,9 +2912,20 @@ function openEditMemberForm(memberId) {
     document.getElementById('addMemberModalTitle').innerText = 'সদস্যের তথ্য সংশোধন';
     document.getElementById('saveMemberBtn').innerText = 'সংশোধন সংরক্ষণ করুন';
 
+    const adminFinGroup = document.getElementById('mAdminFinancialGroup');
     if (state.currentUser.role === 'admin') {
         document.getElementById('mType').value = member.member_type;
         document.getElementById('mCustomFee').value = member.monthly_fee;
+
+        if (adminFinGroup) {
+            adminFinGroup.style.display = 'block';
+            const opEl = document.getElementById('mOpeningArrears');
+            const advEl = document.getElementById('mAdvanceBalance');
+            if (opEl) opEl.value = parseFloat(member.opening_arrears || 0);
+            if (advEl) advEl.value = getMemberAdvanceBalance(member.id);
+        }
+    } else {
+        if (adminFinGroup) adminFinGroup.style.display = 'none';
     }
 
     openModal('add-member-modal');
@@ -2489,6 +2937,19 @@ document.getElementById('addMemberBtn').addEventListener('click', () => {
     document.getElementById('newMemberForm').reset();
     document.getElementById('addMemberModalTitle').innerText = 'নতুন সদস্য যুক্ত করুন';
     document.getElementById('saveMemberBtn').innerText = 'সংরক্ষণ করুন';
+    
+    const adminFinGroup = document.getElementById('mAdminFinancialGroup');
+    if (adminFinGroup) {
+        if (state.currentUser && state.currentUser.role === 'admin') {
+            adminFinGroup.style.display = 'block';
+            const opEl = document.getElementById('mOpeningArrears');
+            const advEl = document.getElementById('mAdvanceBalance');
+            if (opEl) opEl.value = '0';
+            if (advEl) advEl.value = '0';
+        } else {
+            adminFinGroup.style.display = 'none';
+        }
+    }
     adjustFeeAmountInput();
 });
 
@@ -2510,20 +2971,27 @@ function deleteMember(id) {
     }
 }
 
-// Add Custom Income & Expense Transaction Form
+// Add Custom Income, Expense & Transfer Transaction Form
 function setTxFormType(type) {
     state.txFormType = type;
     document.getElementById('txType').value = type;
 
     const incBtn = document.getElementById('txTypeIncomeBtn');
     const expBtn = document.getElementById('txTypeExpenseBtn');
+    const trfBtn = document.getElementById('txTypeTransferBtn');
+    const modeGroup = document.getElementById('txModeGroup');
 
-    if (type === 'INCOME') {
-        incBtn.className = 'btn btn-primary';
-        expBtn.className = 'btn btn-secondary';
-    } else {
-        incBtn.className = 'btn btn-secondary';
-        expBtn.className = 'btn btn-primary';
+    if (incBtn) incBtn.className = type === 'INCOME' ? 'btn btn-primary' : 'btn btn-secondary';
+    if (expBtn) expBtn.className = type === 'EXPENSE' ? 'btn btn-primary' : 'btn btn-secondary';
+    if (trfBtn) trfBtn.className = type === 'TRANSFER' ? 'btn btn-primary' : 'btn btn-secondary';
+
+    if (modeGroup) {
+        modeGroup.style.display = type === 'TRANSFER' ? 'none' : 'block';
+    }
+
+    const catLabel = document.getElementById('txCategoryLabel');
+    if (catLabel) {
+        catLabel.innerText = type === 'TRANSFER' ? 'স্থানান্তরের দিক/ধরন *' : 'খাত/ক্যাটাগরি *';
     }
 
     updateCategoryDropdown();
@@ -2551,7 +3019,15 @@ function updateCategoryDropdown() {
         { value: 'Others_Expense', label: 'অন্যান্য ব্যয়' }
     ];
 
-    const targetList = state.txFormType === 'INCOME' ? incomeCats : expenseCats;
+    const transferCats = [
+        { value: 'Transfer_Deposit', label: 'ক্যাশ থেকে ব্যাংকে জমা (হাতে নগদ কমবে, ব্যাংক বাড়বে)' },
+        { value: 'Transfer_Withdrawal', label: 'ব্যাংক থেকে ক্যাশে উত্তোলন (ব্যাংক কমবে, হাতে নগদ বাড়বে)' }
+    ];
+
+    let targetList = incomeCats;
+    if (state.txFormType === 'EXPENSE') targetList = expenseCats;
+    else if (state.txFormType === 'TRANSFER') targetList = transferCats;
+
     targetList.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.value;
@@ -2572,10 +3048,16 @@ function handleCategoryChange() {
     if (!categorySelect || !descLabel || !descInput) return;
     
     const category = categorySelect.value;
-    if (category === 'Others_Expense' || category === 'Others_Income') {
-        descLabel.innerHTML = 'বিবরণ (অবশ্যই লিখতে হবে) <span class="text-danger" style="color: var(--danger-color);">*</span>';
+    if (category === 'Others_Expense' || category === 'Others_Income' || (category && category.startsWith('Transfer_'))) {
+        descLabel.innerHTML = 'বিবরণ (বাধ্যতামূলক) <span class="text-danger" style="color: var(--danger-color);">*</span>';
         descInput.required = true;
-        descInput.placeholder = "এখানে ব্যয়ের বিবরণ বা কারণ বিস্তারিত লিখুন (বাধ্যতামূলক)...";
+        if (category === 'Transfer_Deposit') {
+            descInput.placeholder = "যেমন: সোনালী ব্যাংকে নগদ অর্থ জমা";
+        } else if (category === 'Transfer_Withdrawal') {
+            descInput.placeholder = "যেমন: মসজিদ ব্যয়ের জন্য ব্যাংক থেকে উত্তোলন";
+        } else {
+            descInput.placeholder = "এখানে লেনদেনের বিবরণ বা কারণ বিস্তারিত লিখুন (বাধ্যতামূলক)...";
+        }
         descInput.style.borderColor = 'var(--danger-color)';
     } else {
         descLabel.innerText = 'বিবরণ (ঐচ্ছিক)';
@@ -2596,9 +3078,14 @@ function handleTransactionSubmit(e) {
     const type = document.getElementById('txType').value;
     const amount = parseFloat(document.getElementById('txAmount').value);
     const category = document.getElementById('txCategory').value;
-    const mode = document.getElementById('txMode').value;
+    let mode = document.getElementById('txMode') ? document.getElementById('txMode').value : 'CASH';
     const date = document.getElementById('txDate').value;
     const desc = document.getElementById('txDescription').value;
+
+    if (type === 'TRANSFER') {
+        if (category === 'Transfer_Deposit') mode = 'CASH_TO_BANK';
+        else if (category === 'Transfer_Withdrawal') mode = 'BANK_TO_CASH';
+    }
 
     const newTx = {
         id: 'tx-custom-' + Date.now(),
@@ -2621,7 +3108,119 @@ function handleTransactionSubmit(e) {
     setTxFormType('INCOME');
 
     switchView('dashboard');
-    alert("লেনদেনটি সফলভাবে সংরক্ষণ করা হয়েছে।");
+    alert(type === 'TRANSFER' ? "ব্যাংক স্থানান্তর লেনদেনটি সফলভাবে সম্পন্ন হয়েছে।" : "লেনদেনটি সফলভাবে সংরক্ষণ করা হয়েছে।");
+}
+
+// ── Cashier Bank Transfer Functions (Deposit & Withdrawal) ──
+function setBankTransferMode(mode) {
+    const hiddenMode = document.getElementById('btTransferMode');
+    const depositBtn = document.getElementById('btModeDepositBtn');
+    const withdrawBtn = document.getElementById('btModeWithdrawBtn');
+    const noticeBox = document.getElementById('btNoticeBox');
+    const descInput = document.getElementById('btDescription');
+    const submitBtn = document.getElementById('btSubmitBtn');
+
+    if (hiddenMode) hiddenMode.value = mode;
+
+    if (mode === 'CASH_TO_BANK') {
+        if (depositBtn) {
+            depositBtn.className = 'btn btn-primary';
+            depositBtn.style.background = '#0288d1';
+            depositBtn.style.borderColor = '#0288d1';
+            depositBtn.style.color = '#ffffff';
+        }
+        if (withdrawBtn) {
+            withdrawBtn.className = 'btn btn-secondary';
+            withdrawBtn.style.background = '';
+            withdrawBtn.style.borderColor = '';
+            withdrawBtn.style.color = '';
+        }
+        if (noticeBox) {
+            noticeBox.style.background = '#e8f5e9';
+            noticeBox.style.borderColor = '#c8e6c9';
+            noticeBox.style.color = '#1b5e20';
+            noticeBox.innerHTML = '<i class="fa-solid fa-circle-info"></i> <strong>হিসাবের লজিক:</strong> ব্যাংক জমা ➔ হাতে নগদ থেকে টাকা কমবে এবং সমপরিমাণ টাকা ব্যাংক হিসাবে যোগ হবে।';
+        }
+        if (descInput) descInput.placeholder = "যেমন: সোনালী ব্যাংক বরইতলী শাখায় জমা";
+        if (submitBtn) {
+            submitBtn.style.background = '#0288d1';
+            submitBtn.style.borderColor = '#0288d1';
+            submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> ব্যাংকে জমা সম্পন্ন করুন';
+        }
+    } else {
+        if (withdrawBtn) {
+            withdrawBtn.className = 'btn btn-primary';
+            withdrawBtn.style.background = '#0288d1';
+            withdrawBtn.style.borderColor = '#0288d1';
+            withdrawBtn.style.color = '#ffffff';
+        }
+        if (depositBtn) {
+            depositBtn.className = 'btn btn-secondary';
+            depositBtn.style.background = '';
+            depositBtn.style.borderColor = '';
+            depositBtn.style.color = '';
+        }
+        if (noticeBox) {
+            noticeBox.style.background = '#e1f5fe';
+            noticeBox.style.borderColor = '#b3e5fc';
+            noticeBox.style.color = '#01579b';
+            noticeBox.innerHTML = '<i class="fa-solid fa-circle-info"></i> <strong>হিসাবের লজিক:</strong> ব্যাংক উত্তোলন ➔ ব্যাংক ব্যালেন্স থেকে টাকা কমবে এবং সমপরিমাণ টাকা হাতে নগদ তহবিলে যোগ হবে।';
+        }
+        if (descInput) descInput.placeholder = "যেমন: মসজিদ খরচের জন্য ব্যাংক থেকে উত্তোলন";
+        if (submitBtn) {
+            submitBtn.style.background = '#0277bd';
+            submitBtn.style.borderColor = '#0277bd';
+            submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> ব্যাংক থেকে উত্তোলন সম্পন্ন করুন';
+        }
+    }
+}
+
+function handleCashierBankTransferSubmit(e) {
+    e.preventDefault();
+    if (!state.currentUser || (state.currentUser.role !== 'cashier' && state.currentUser.role !== 'admin')) {
+        alert("শুধুমাত্র ক্যাশিয়ার ও এডমিন এই লেনদেন এন্ট্রি করতে পারবেন!");
+        return;
+    }
+
+    const mode = document.getElementById('btTransferMode').value || 'CASH_TO_BANK';
+    const date = document.getElementById('btDate').value;
+    const amount = parseFloat(document.getElementById('btAmount').value);
+    const desc = document.getElementById('btDescription').value.trim();
+
+    if (!amount || amount <= 0) {
+        alert("অনুগ্রহ করে সঠিক টাকার পরিমাণ লিখুন!");
+        return;
+    }
+
+    const isDeposit = (mode === 'CASH_TO_BANK');
+    const category = isDeposit ? 'Transfer_Deposit' : 'Transfer_Withdrawal';
+
+    const newTx = {
+        id: 'tx-transfer-' + Date.now(),
+        transaction_type: 'TRANSFER',
+        category: category,
+        amount: amount,
+        payment_mode: mode,
+        description: desc || (isDeposit ? 'হাতে নগদ থেকে ব্যাংক হিসাবে জমা' : 'ব্যাংক থেকে ক্যাশে উত্তোলন'),
+        date: date,
+        created_by: state.currentUser.role,
+        created_at: new Date().toISOString()
+    };
+
+    state.transactions.unshift(newTx);
+    saveState();
+    refreshAppUI();
+
+    document.getElementById('cashierBankTransferForm').reset();
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('btDate').value = today;
+    setBankTransferMode('CASH_TO_BANK');
+
+    if (isDeposit) {
+        alert(`সফলভাবে ৳ ${formatCurrency(amount)} ব্যাংকে জমা করা হয়েছে।\n(লজিক: হাতে নগদ থেকে কমেছে এবং ব্যাংক ব্যালেন্সে যোগ হয়েছে)`);
+    } else {
+        alert(`সফলভাবে ৳ ${formatCurrency(amount)} ব্যাংক থেকে উত্তোলন করা হয়েছে।\n(লজিক: ব্যাংক থেকে কমেছে এবং হাতে নগদে যোগ হয়েছে)`);
+    }
 }
 
 // ── Report Tab State ──
@@ -2732,8 +3331,13 @@ function loadReports() {
     state.transactions.forEach(tx => {
         const txDate = tx.date;
         const val = parseFloat(tx.amount || 0);
-        const pm = (tx.payment_mode || tx.payment_method || '').toUpperCase();
-        if (pm === 'BANK') bankBal += tx.transaction_type === 'INCOME' ? val : -val;
+        const pm = (tx.payment_mode || tx.payment_method || 'CASH').toUpperCase();
+        if (tx.transaction_type === 'TRANSFER') {
+            if (pm === 'CASH_TO_BANK') bankBal += val;
+            else if (pm === 'BANK_TO_CASH') bankBal -= val;
+        } else if (pm === 'BANK') {
+            bankBal += tx.transaction_type === 'INCOME' ? val : -val;
+        }
 
         const inPeriod = (txDate >= startDate && txDate <= endDate);
         if (!inPeriod) return;
@@ -2882,13 +3486,24 @@ function generateAdvancedPrintReport() {
     state.transactions.forEach(tx => {
         const txDate = tx.date;
         const val = parseFloat(tx.amount || 0);
-        const pm = (tx.payment_mode || tx.payment_method || '').toUpperCase();
+        const pm = (tx.payment_mode || tx.payment_method || 'CASH').toUpperCase();
         
         const inPeriod = (txDate >= startDate && txDate <= endDate);
         const before = (txDate < startDate);
 
-        if (pm === 'BANK') bankBal += tx.transaction_type === 'INCOME' ? val : -val;
-        else cashBal += tx.transaction_type === 'INCOME' ? val : -val;
+        if (tx.transaction_type === 'TRANSFER') {
+            if (pm === 'CASH_TO_BANK') {
+                bankBal += val;
+                cashBal -= val;
+            } else if (pm === 'BANK_TO_CASH') {
+                bankBal -= val;
+                cashBal += val;
+            }
+        } else if (pm === 'BANK') {
+            bankBal += tx.transaction_type === 'INCOME' ? val : -val;
+        } else {
+            cashBal += tx.transaction_type === 'INCOME' ? val : -val;
+        }
 
         if (before) { 
             if (tx.transaction_type === 'INCOME') prevInc += val; 
@@ -4131,8 +4746,8 @@ function handleArrearsAdjustmentSubmit(e) {
         const amount = parseFloat(document.getElementById('adjAmount').value);
         const reason = document.getElementById('adjReason').value.trim();
 
-        if (amount <= 0 || isNaN(amount)) {
-            alert("টাকার পরিমাণ অবশ্যই ০-এর চেয়ে বেশি হতে হবে!");
+        if (isNaN(amount) || (type === 'advance_set' ? amount < 0 : amount <= 0)) {
+            alert(type === 'advance_set' ? "টাকার পরিমাণ ০ বা তার বেশি হতে হবে!" : "টাকার পরিমাণ অবশ্যই ০-এর চেয়ে বেশি হতে হবে!");
             return;
         }
 
@@ -4154,18 +4769,20 @@ function handleArrearsAdjustmentSubmit(e) {
             member.opening_arrears = currentOpening + amount;
             typeStr = 'বকেয়া বৃদ্ধি';
         } else if (type === 'advance_increase') {
-            let currentAdvance = parseFloat(member.advance_balance || 0);
-            member.advance_balance = currentAdvance + amount;
-            processAdvanceDeductions(); // Allocate advance balance immediately
+            let currentTotalAdv = getMemberAdvanceBalance(member.id);
+            setMemberTotalAdvance(member, currentTotalAdv + amount);
             typeStr = 'অগ্রিম জমা বৃদ্ধি';
         } else if (type === 'advance_decrease') {
-            let currentAdvance = parseFloat(member.advance_balance || 0);
-            if (amount > currentAdvance) {
-                alert(`অগ্রিম জমার চেয়ে কমানোর পরিমাণ বেশি হতে পারে না! (বর্তমান জমা: ৳ ${currentAdvance})`);
+            let currentTotalAdv = getMemberAdvanceBalance(member.id);
+            if (amount > currentTotalAdv) {
+                alert(`অগ্রিম জমার চেয়ে কমানোর পরিমাণ বেশি হতে পারে না! (বর্তমান মোট অগ্রিম জমা: ৳ ${englishToBanglaNum(currentTotalAdv.toFixed(0))})`);
                 return;
             }
-            member.advance_balance = currentAdvance - amount;
+            setMemberTotalAdvance(member, currentTotalAdv - amount);
             typeStr = 'অগ্রিম জমা হ্রাস';
+        } else if (type === 'advance_set') {
+            setMemberTotalAdvance(member, amount);
+            typeStr = `অগ্রিম জমা নির্ধারণ (৳ ${englishToBanglaNum(amount.toFixed(0))})`;
         }
 
         saveState();
