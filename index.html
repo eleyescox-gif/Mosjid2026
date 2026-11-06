@@ -150,63 +150,25 @@
                     </div>
                 </div>
 
-                <!-- CASHIER & ADMIN: Dedicated Bank Deposit & Withdrawal Section -->
-                <div id="cashierBankTransferSection" class="chart-card" style="display: none; border: 1.5px solid #0288d1; background: #f0f9ff; margin-bottom: 20px; border-radius: 12px; padding: 15px;">
-                    <div class="chart-title" style="margin-bottom: 12px; font-size: 14px; font-weight: 700; color: #0277bd; display: flex; justify-content: space-between; align-items: center;">
-                        <span><i class="fa-solid fa-arrow-right-arrow-left"></i> ব্যাংক জমা ও উত্তোলন (ক্যাশ ⇄ ব্যাংক)</span>
-                        <span style="font-size: 11px; background: #e1f5fe; color: #01579b; padding: 3px 8px; border-radius: 12px; font-weight: 600;">ক্যাশিয়ার সেকশন</span>
+                <!-- DASHBOARD: Quick Bank & Cash Summary Card for Cashier & Admin -->
+                <div id="dashboardBankQuickSection" class="chart-card" style="display: none; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1.5px solid #b3e5fc; border-radius: 12px; padding: 14px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-weight: 700; font-size: 13.5px; color: #0277bd;"><i class="fa-solid fa-building-columns"></i> ব্যাংক ও ক্যাশ তহবিল স্থিতি</span>
+                        <span style="font-size: 11px; background: #0288d1; color: #fff; padding: 3px 9px; border-radius: 12px; font-weight: 600;">কোষাধ্যক্ষ প্যানেল</span>
                     </div>
-
-                    <!-- Live Balance Overview -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; background: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid #b3e5fc;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; background: #ffffff; padding: 9px 12px; border-radius: 8px; border: 1px solid #b3e5fc;">
                         <div>
                             <span style="font-size: 11px; color: var(--text-muted); display: block;">চলতি হাতে নগদ:</span>
-                            <strong id="btLiveCash" style="font-size: 14px; color: var(--primary-color);">৳ ০.০০</strong>
+                            <strong id="dashLiveCash" style="font-size: 14px; color: var(--primary-color);">৳ ০.০০</strong>
                         </div>
                         <div style="text-align: right;">
                             <span style="font-size: 11px; color: var(--text-muted); display: block;">চলতি ব্যাংক ব্যালেন্স:</span>
-                            <strong id="btLiveBank" style="font-size: 14px; color: #0277bd;">৳ ০.০০</strong>
+                            <strong id="dashLiveBank" style="font-size: 14px; color: #0277bd;">৳ ০.০০</strong>
                         </div>
                     </div>
-
-                    <!-- Direction Selector Buttons -->
-                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-                        <button type="button" id="btModeDepositBtn" class="btn btn-primary" onclick="setBankTransferMode('CASH_TO_BANK')" style="flex: 1; font-size: 12px; padding: 9px 4px; background: #0288d1; border-color: #0288d1;">
-                            <i class="fa-solid fa-building-columns"></i> ব্যাংকে জমা (ক্যাশ ➔ ব্যাংক)
-                        </button>
-                        <button type="button" id="btModeWithdrawBtn" class="btn btn-secondary" onclick="setBankTransferMode('BANK_TO_CASH')" style="flex: 1; font-size: 12px; padding: 9px 4px;">
-                            <i class="fa-solid fa-money-bill-wave"></i> ব্যাংক থেকে উত্তোলন (ব্যাংক ➔ ক্যাশ)
-                        </button>
-                    </div>
-
-                    <!-- Accounting Logic Clarification Alert -->
-                    <div id="btNoticeBox" style="font-size: 12px; padding: 9px 12px; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 6px; margin-bottom: 14px; color: #1b5e20; line-height: 1.4;">
-                        <i class="fa-solid fa-circle-info"></i> <strong>হিসাবের লজিক:</strong> ব্যাংক জমা ➔ হাতে নগদ থেকে টাকা কমবে এবং সমপরিমাণ টাকা ব্যাংক হিসাবে যোগ হবে।
-                    </div>
-
-                    <form id="cashierBankTransferForm" onsubmit="handleCashierBankTransferSubmit(event)">
-                        <input type="hidden" id="btTransferMode" value="CASH_TO_BANK">
-                        
-                        <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label for="btDate" style="font-size: 12px; font-weight: 600;">তারিখ *</label>
-                                <input type="date" id="btDate" class="form-control" required style="font-size: 13px;">
-                            </div>
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label for="btAmount" style="font-size: 12px; font-weight: 600;">টাকার পরিমাণ (৳) *</label>
-                                <input type="number" id="btAmount" class="form-control" placeholder="যেমন: ৫০০০" min="1" step="any" required style="font-size: 13px;">
-                            </div>
-                        </div>
-
-                        <div class="form-group" style="margin-bottom: 14px;">
-                            <label for="btDescription" style="font-size: 12px; font-weight: 600;">বিবরণ / ব্যাংক ও শাখার নাম *</label>
-                            <input type="text" id="btDescription" class="form-control" placeholder="যেমন: সোনালী ব্যাংক বরইতলী শাখায় জমা" required style="font-size: 13px;">
-                        </div>
-
-                        <button type="submit" id="btSubmitBtn" class="btn btn-primary" style="width: 100%; height: 40px; font-size: 13px; font-weight: 700; background: #0288d1; border-color: #0288d1; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                            <i class="fa-solid fa-paper-plane"></i> ব্যাংকে জমা সম্পন্ন করুন
-                        </button>
-                    </form>
+                    <button type="button" class="btn btn-primary" onclick="switchView('profile'); setTimeout(scrollToCashierBankTransfer, 200);" style="width: 100%; height: 38px; font-size: 12.5px; font-weight: 700; background: #0288d1; border-color: #0288d1; display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: 8px;">
+                        <i class="fa-solid fa-arrow-right-arrow-left"></i> সেটিংসে ব্যাংক উত্তোলন ও জমা করুন
+                    </button>
                 </div>
 
                 <!-- Managing Committee Card Section -->
@@ -523,6 +485,65 @@
                 </div>
 
                 <!-- ADMIN ONLY: Institution Settings Section -->
+                <!-- SETTINGS: Dedicated Cashier Bank Withdrawal & Deposit Feature -->
+                <div id="cashierBankTransferSection" class="chart-card" style="display: none; border: 1.5px solid #0288d1; background: #f0f9ff; margin-bottom: 20px; border-radius: 12px; padding: 15px;">
+                    <div class="chart-title" style="margin-bottom: 12px; font-size: 14px; font-weight: 700; color: #0277bd; display: flex; justify-content: space-between; align-items: center;">
+                        <span><i class="fa-solid fa-arrow-right-arrow-left"></i> ব্যাংক উত্তোলন ও জমা (কোষাধ্যক্ষ প্যানেল)</span>
+                        <span style="font-size: 11px; background: #e1f5fe; color: #01579b; padding: 3px 8px; border-radius: 12px; font-weight: 600;">কোষাধ্যক্ষ ফিচার</span>
+                    </div>
+
+                    <!-- Live Balance Overview -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; background: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid #b3e5fc;">
+                        <div>
+                            <span style="font-size: 11px; color: var(--text-muted); display: block;">চলতি হাতে নগদ:</span>
+                            <strong id="btLiveCash" style="font-size: 14px; color: var(--primary-color);">৳ ০.০০</strong>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="font-size: 11px; color: var(--text-muted); display: block;">চলতি ব্যাংক ব্যালেন্স:</span>
+                            <strong id="btLiveBank" style="font-size: 14px; color: #0277bd;">৳ ০.০০</strong>
+                        </div>
+                    </div>
+
+                    <!-- Direction Selector Buttons -->
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <button type="button" id="btModeWithdrawBtn" class="btn btn-primary" onclick="setBankTransferMode('BANK_TO_CASH')" style="flex: 1; font-size: 12px; padding: 9px 4px; background: #0288d1; border-color: #0288d1; color: #fff;">
+                            <i class="fa-solid fa-money-bill-wave"></i> ব্যাংক উত্তোলন (ব্যাংক ➔ ক্যাশ)
+                        </button>
+                        <button type="button" id="btModeDepositBtn" class="btn btn-secondary" onclick="setBankTransferMode('CASH_TO_BANK')" style="flex: 1; font-size: 12px; padding: 9px 4px;">
+                            <i class="fa-solid fa-building-columns"></i> ব্যাংকে জমা (ক্যাশ ➔ ব্যাংক)
+                        </button>
+                    </div>
+
+                    <!-- Accounting Logic Clarification Alert -->
+                    <div id="btNoticeBox" style="font-size: 12px; padding: 10px 12px; background: #e1f5fe; border: 1px solid #b3e5fc; border-radius: 6px; margin-bottom: 14px; color: #01579b; line-height: 1.45;">
+                        <i class="fa-solid fa-circle-info"></i> <strong>হিসাবের লজিক:</strong> ব্যাংক উত্তোলন ➔ ব্যাংক ব্যালেন্স থেকে টাকা কমবে এবং সমপরিমাণ টাকা হাতে নগদ তহবিলে যোগ হবে। যদি কোনো খরচ/ব্যয় হয়, তবে তা সরাসরি এই হাতে নগদ তহবিল থেকেই বিয়োগ হবে।
+                    </div>
+
+                    <form id="cashierBankTransferForm" onsubmit="handleCashierBankTransferSubmit(event)">
+                        <input type="hidden" id="btTransferMode" value="BANK_TO_CASH">
+                        
+                        <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="btDate" style="font-size: 12px; font-weight: 600;">তারিখ *</label>
+                                <input type="date" id="btDate" class="form-control" required style="font-size: 13px;">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="btAmount" style="font-size: 12px; font-weight: 600;">টাকার পরিমাণ (৳) *</label>
+                                <input type="number" id="btAmount" class="form-control" placeholder="যেমন: ৫০০০" min="1" step="any" required style="font-size: 13px;">
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 14px;">
+                            <label for="btDescription" style="font-size: 12px; font-weight: 600;">বিবরণ / ব্যাংক ও শাখার নাম *</label>
+                            <input type="text" id="btDescription" class="form-control" placeholder="যেমন: মসজিদ খরচের জন্য ব্যাংক থেকে উত্তোলন" required style="font-size: 13px;">
+                        </div>
+
+                        <button type="submit" id="btSubmitBtn" class="btn btn-primary" style="width: 100%; height: 40px; font-size: 13px; font-weight: 700; background: #0288d1; border-color: #0288d1; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <i class="fa-solid fa-paper-plane"></i> ব্যাংক থেকে উত্তোলন সম্পন্ন করুন
+                        </button>
+                    </form>
+                </div>
+
                 <div id="mosqueSettingsSection" class="chart-card" style="margin-bottom: 20px; display: none;">
                     <div class="chart-title" style="margin-bottom: 12px;">
                         <span>প্রতিষ্ঠানের সেটিংস (এডমিন প্যানেল)</span>

@@ -746,6 +746,7 @@ function applyRolePermissions() {
     const exportSec = document.getElementById('adminExportSection');
     const smsGatewaySec = document.getElementById('adminSmsGatewaySection');
     const cashierBankTransferSec = document.getElementById('cashierBankTransferSection');
+    const dashboardBankQuickSec = document.getElementById('dashboardBankQuickSection');
 
     // Default states (Closed/Hidden for general safety)
     navTx.style.display = 'none';
@@ -760,6 +761,7 @@ function applyRolePermissions() {
     settingsSec.style.display = 'none';
     commSection.style.display = 'none';
     if (cashierBankTransferSec) cashierBankTransferSec.style.display = 'none';
+    if (dashboardBankQuickSec) dashboardBankQuickSec.style.display = 'none';
     if (binSection) binSection.style.display = 'none';
     if (globalBinSec) globalBinSec.style.display = 'none';
     if (jsonBackupSec) jsonBackupSec.style.display = 'none';
@@ -783,6 +785,7 @@ function applyRolePermissions() {
     if (role === 'admin') {
         navTx.style.display = 'flex';
         if (cashierBankTransferSec) cashierBankTransferSec.style.display = 'block';
+        if (dashboardBankQuickSec) dashboardBankQuickSec.style.display = 'block';
         pendingSec.style.display = 'block';
         changePassSec.style.display = 'block';
         systemControls.style.display = 'block';
@@ -822,6 +825,7 @@ function applyRolePermissions() {
     else if (role === 'cashier') {
         navTx.style.display = 'flex'; // Cashier can see FAB to post money
         if (cashierBankTransferSec) cashierBankTransferSec.style.display = 'block'; // Cashier sees bank transfer section
+        if (dashboardBankQuickSec) dashboardBankQuickSec.style.display = 'block'; // Cashier sees bank quick card on dashboard
         addMemberBtn.style.display = 'none';
         changePassSec.style.display = 'none';
         systemControls.style.display = 'none';
@@ -1410,6 +1414,10 @@ function calculateFundBalances() {
     const btLiveBankEl = document.getElementById('btLiveBank');
     if (btLiveCashEl) btLiveCashEl.innerText = '৳ ' + formatCurrency(totalCash);
     if (btLiveBankEl) btLiveBankEl.innerText = '৳ ' + formatCurrency(totalBank);
+    const dashLiveCashEl = document.getElementById('dashLiveCash');
+    const dashLiveBankEl = document.getElementById('dashLiveBank');
+    if (dashLiveCashEl) dashLiveCashEl.innerText = '৳ ' + formatCurrency(totalCash);
+    if (dashLiveBankEl) dashLiveBankEl.innerText = '৳ ' + formatCurrency(totalBank);
 }
 
 // Update Dashboard summary stats
@@ -7227,3 +7235,13 @@ async function sendBulkDueSms() {
     alert(`বাল্ক এসএমএস প্রেরণ সম্পন্ন হয়েছে!\n\n• সফল: ${englishToBanglaNum(successCount.toString())} জন\n• ব্যর্থ: ${englishToBanglaNum(failedCount.toString())} জন`);
 }
 window.sendBulkDueSms = sendBulkDueSms;
+
+function scrollToCashierBankTransfer() {
+    const el = document.getElementById('cashierBankTransferSection');
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        el.style.boxShadow = '0 0 0 3px rgba(2, 136, 209, 0.4)';
+        setTimeout(() => { el.style.boxShadow = ''; }, 1500);
+    }
+}
+window.scrollToCashierBankTransfer = scrollToCashierBankTransfer;
