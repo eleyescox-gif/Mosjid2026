@@ -746,8 +746,7 @@ function applyRolePermissions() {
     const exportSec = document.getElementById('adminExportSection');
     const smsGatewaySec = document.getElementById('adminSmsGatewaySection');
     const cashierBankTransferSec = document.getElementById('cashierBankTransferSection');
-    const dashboardBankQuickSec = document.getElementById('dashboardBankQuickSection');
-
+    
     // Default states (Closed/Hidden for general safety)
     navTx.style.display = 'none';
     navReports.style.display = 'flex';
@@ -761,8 +760,7 @@ function applyRolePermissions() {
     settingsSec.style.display = 'none';
     commSection.style.display = 'none';
     if (cashierBankTransferSec) cashierBankTransferSec.style.display = 'none';
-    if (dashboardBankQuickSec) dashboardBankQuickSec.style.display = 'none';
-    if (binSection) binSection.style.display = 'none';
+        if (binSection) binSection.style.display = 'none';
     if (globalBinSec) globalBinSec.style.display = 'none';
     if (jsonBackupSec) jsonBackupSec.style.display = 'none';
     if (smsGatewaySec) smsGatewaySec.style.display = 'none';
@@ -785,8 +783,7 @@ function applyRolePermissions() {
     if (role === 'admin') {
         navTx.style.display = 'flex';
         if (cashierBankTransferSec) cashierBankTransferSec.style.display = 'block';
-        if (dashboardBankQuickSec) dashboardBankQuickSec.style.display = 'block';
-        pendingSec.style.display = 'block';
+                pendingSec.style.display = 'block';
         changePassSec.style.display = 'block';
         systemControls.style.display = 'block';
         settingsSec.style.display = 'block';
@@ -957,6 +954,11 @@ function populateSettingsInputs() {
     const liveBankEl = document.getElementById('settingsLiveBank');
     if (liveCashEl) liveCashEl.innerText = formatCurrency(liveCash);
     if (liveBankEl) liveBankEl.innerText = formatCurrency(liveBank);
+
+    const btLiveCashEl = document.getElementById('btLiveCash');
+    const btLiveBankEl = document.getElementById('btLiveBank');
+    if (btLiveCashEl) btLiveCashEl.innerText = '৳ ' + formatCurrency(liveCash);
+    if (btLiveBankEl) btLiveBankEl.innerText = '৳ ' + formatCurrency(liveBank);
 
     const bankInput = document.getElementById('setInitialBankBalance');
     const cashInput = document.getElementById('setInitialCashBalance');
